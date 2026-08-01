@@ -386,10 +386,15 @@
         e.g. "Packers -3.5", not structured odds) — add one later if you want
         odds/implied-win% back on the site.
    4. Update ROSTER below whenever the group changes.
-   5. Set SEASON_START_DATE to the date Week 1 begins (format "YYYY-MM-DD"), once
-      you know it. "This Week" is computed from today's date relative to that —
-      not from whatever's in the sheet — so it stays correct even in a week
-      nobody's picked yet. Until it's set, the site shows a "not started" state.
+   5. SEASON_START_DATE is the calendar date (Eastern time) Week 1 begins —
+      currently set to Tue Sep 8, 2026. Each week runs Tue 12:00am through the
+      following Mon 11:59pm Eastern, 7 days, regardless of where a visitor is
+      viewing from (the site anchors to America/New_York, not the browser's
+      local time zone, and correctly handles the EDT->EST fallback partway
+      through the season). "This Week" is computed from today's actual date
+      relative to this anchor — not from whatever weeks appear in the sheet —
+      so it's correct even in a week nobody's picked yet, and it shows every
+      official pick for that week whether or not it has a Result yet.
    6. Scoring: a normal win/loss is worth 1. A DOTD pick is worth
       DOTD_WIN_CREDIT wins if it hits, DOTD_LOSS_CREDIT losses if it doesn't
       (odds requirement waived, capped at DOTD_ANNUAL_LIMIT/year). A POTY pick
@@ -405,7 +410,7 @@ const CONFIG = {
   DOTD_ANNUAL_LIMIT: 1,
   POTY_WIN_CREDIT: 2,
   POTY_LOSS_CREDIT: 2,
-  SEASON_START_DATE: null, // e.g. "2026-09-05" — the Monday (or whatever day) Week 1 starts
+  SEASON_START_DATE: "2026-09-08", // Tue Sep 8, 2026, 12:00am Eastern — Week 1 start
   // Everyone in the group, so people who haven't picked yet still show up at 0-0.
   // Names must match the "Name" column in the Form exactly. Add/remove names here as your group changes.
   ROSTER: ["Adam","Tim","Justin","Dylan","Dom","Joey","Bryce","JR","Kurt","Ryan","Tyler"],
@@ -428,17 +433,31 @@ function normalizePickType(raw){
   return 'normal';
 }
 
+// Returns "YYYY-MM-DD" for the given instant AS SEEN in America/New_York,
+// so week boundaries land on the same real-world moment for every visitor
+// regardless of their own device's time zone, and stay correct across the
+// EDT/EST daylight-saving switch mid-season (Intl handles that, not us).
+function nyDateString(date){
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
+  });
+  return fmt.format(date); // e.g. "2026-09-08"
+}
 
 function computeCurrentWeek(){
   if(!CONFIG.SEASON_START_DATE) return null;
-  const start = new Date(CONFIG.SEASON_START_DATE + 'T00:00:00');
-  if(isNaN(start.getTime())) return null;
-  const now = new Date();
-  const msPerDay = 24*60*60*1000;
-  if(now < start){
-    return {status:'pre', week:0, startsInDays: Math.ceil((start-now)/msPerDay)};
+  const [sy, sm, sd] = CONFIG.SEASON_START_DATE.split('-').map(Number);
+  if(!sy || !sm || !sd) return null;
+  const startDayIndex = Date.UTC(sy, sm-1, sd); // pure calendar-day anchor, not a real instant
+
+  const [ny, nm, nd] = nyDateString(new Date()).split('-').map(Number);
+  const todayDayIndex = Date.UTC(ny, nm-1, nd);
+
+  const dayDiff = Math.round((todayDayIndex - startDayIndex) / 86400000);
+  if(dayDiff < 0){
+    return {status:'pre', week:0, startsInDays: -dayDiff};
   }
-  const week = Math.floor((now-start)/(7*msPerDay)) + 1;
+  const week = Math.floor(dayDiff/7) + 1;
   if(week > CONFIG.TOTAL_WEEKS) return {status:'done', week:CONFIG.TOTAL_WEEKS};
   return {status:'active', week};
 }
