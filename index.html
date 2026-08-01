@@ -27,6 +27,7 @@
     --bronze:#C08A56;
   }
   *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
   html,body{margin:0;padding:0;}
   body{
     background:
@@ -37,6 +38,8 @@
     font-family:var(--font-mono);
     min-height:100vh;
     -webkit-font-smoothing:antialiased;
+    overscroll-behavior-y:contain;
+    -webkit-tap-highlight-color:transparent;
   }
   /* soft gold glow, replaces the old chalk-dust texture */
   body::before{
@@ -217,7 +220,18 @@
   .pick-tag.dotd{color:var(--chalk-red);}
   .pick-tag.poty{color:var(--chalk-yellow);}
 
+  .table-scroll-wrap{position:relative;}
   .table-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch;}
+  .table-scroll-wrap::after{
+    content:"";
+    position:absolute; top:0; right:0; bottom:0; width:26px;
+    background:linear-gradient(to right, transparent, var(--board-bg-2) 70%);
+    pointer-events:none;
+    opacity:0; transition:opacity .15s ease;
+  }
+  @media (max-width:700px){
+    .table-scroll-wrap::after{opacity:1;}
+  }
 
   .usage-pill{
     display:inline-flex; align-items:center; gap:3px;
@@ -276,7 +290,11 @@
   @media (max-width:560px){
     .wrap{padding:18px 12px 60px;}
     table{font-size:0.76rem;}
-    th, td{padding:8px 6px;}
+    th, td{padding:10px 7px;}
+    nav.tabs{gap:8px;}
+    nav.tabs button{padding:11px 14px; font-size:0.8rem;}
+    .player-card{padding:16px;}
+    tr.clickable td{padding-top:12px; padding-bottom:12px;}
   }
 </style>
 </head>
@@ -325,6 +343,7 @@
     <section class="view active" id="view-standings">
       <div class="panel">
         <h2>Season Standings <span class="sm">ranked by win %, then wins</span></h2>
+        <div class="table-scroll-wrap">
         <div class="table-scroll">
         <table>
           <thead>
@@ -332,6 +351,7 @@
           </thead>
           <tbody id="standingsBody"></tbody>
         </table>
+        </div>
         </div>
       </div>
     </section>
@@ -725,6 +745,7 @@ function openPlayer(name){
 function setActiveView(view){
   document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   document.querySelectorAll('section.view').forEach(s => s.classList.toggle('active', s.id === 'view-'+view));
+  window.scrollTo({top:0, behavior:'smooth'});
 }
 
 document.querySelectorAll('nav.tabs button').forEach(btn => {
