@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Play of the Week</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --board-bg:#1c2320;
+    --board-bg-2:#232b27;
+    --chalk-white:#eef1e8;
+    --chalk-dim:#b9c2ba;
+    --chalk-yellow:#e8c76b;
+    --chalk-green:#8fbf9f;
+    --chalk-red:#d98787;
+    --chalk-blue:#8fb4c9;
+    --line: rgba(238,241,232,0.14);
+    --line-strong: rgba(238,241,232,0.28);
+    --font-display:'Kalam', cursive;
+    --font-mono:'JetBrains Mono', monospace;
+    --radius: 10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(ellipse at 20% -10%, rgba(238,241,232,0.05), transparent 40%),
+      radial-gradient(ellipse at 90% 0%, rgba(238,241,232,0.04), transparent 35%),
+      var(--board-bg);
+    color:var(--chalk-white);
+    font-family:var(--font-mono);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* chalk dust texture overlay */
+  body::before{
+    content:"";
+    position:fixed; inset:0; pointer-events:none; z-index:0;
+    opacity:0.05; mix-blend-mode:screen;
+    background-image:
+      radial-gradient(1px 1px at 10% 20%, #fff 100%, transparent),
+      radial-gradient(1px 1px at 80% 40%, #fff 100%, transparent),
+      radial-gradient(1px 1px at 30% 70%, #fff 100%, transparent),
+      radial-gradient(1px 1px at 60% 85%, #fff 100%, transparent),
+      radial-gradient(1px 1px at 45% 10%, #fff 100%, transparent),
+      radial-gradient(1px 1px at 90% 65%, #fff 100%, transparent);
+    background-size: 300px 300px;
+  }
+  .wrap{max-width:960px; margin:0 auto; padding:28px 20px 80px; position:relative; z-index:1;}
+
+  header.board{
+    border:2px solid var(--line-strong);
+    border-radius:var(--radius);
+    padding:28px 24px 22px;
+    background: linear-gradient(180deg, var(--board-bg-2), var(--board-bg));
+    box-shadow: inset 0 0 60px rgba(0,0,0,0.35);
+    position:relative;
+    text-align:center;
+  }
+  header.board h1{
+    font-family:var(--font-display);
+    font-weight:700;
+    font-size:clamp(2.2rem, 6vw, 3.4rem);
+    margin:0;
+    letter-spacing:0.5px;
+    color:var(--chalk-white);
+    text-shadow: 0 0 14px rgba(238,241,232,0.18);
+    transform: rotate(-0.6deg);
+  }
+  header.board .sub{
+    margin-top:6px;
+    font-size:0.85rem;
+    color:var(--chalk-dim);
+    letter-spacing:0.5px;
+  }
+  header.board .meta{
+    margin-top:16px;
+    display:flex; gap:10px; justify-content:center; flex-wrap:wrap;
+  }
+  .pill{
+    border:1px solid var(--line-strong);
+    border-radius:999px;
+    padding:5px 12px;
+    font-size:0.72rem;
+    letter-spacing:0.6px;
+    color:var(--chalk-dim);
+    text-transform:uppercase;
+  }
+  .pill b{color:var(--chalk-yellow); font-weight:600;}
+
+  nav.tabs{
+    display:flex; gap:6px; margin:20px 0 18px; flex-wrap:wrap;
+  }
+  nav.tabs button{
+    font-family:var(--font-mono);
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--chalk-dim);
+    padding:9px 16px;
+    border-radius:8px;
+    cursor:pointer;
+    font-size:0.82rem;
+    letter-spacing:0.3px;
+    transition:all .15s ease;
+  }
+  nav.tabs button:hover{border-color:var(--line-strong); color:var(--chalk-white);}
+  nav.tabs button.active{
+    background:rgba(238,241,232,0.06);
+    border-color:var(--chalk-yellow);
+    color:var(--chalk-yellow);
+  }
+
+  section.view{display:none;}
+  section.view.active{display:block; animation:fade .25s ease;}
+  @keyframes fade{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);}}
+
+  .panel{
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    background:rgba(238,241,232,0.02);
+    padding:18px 18px 6px;
+    margin-bottom:16px;
+  }
+  .panel h2{
+    font-family:var(--font-display);
+    font-size:1.4rem;
+    margin:0 0 14px;
+    color:var(--chalk-white);
+    font-weight:700;
+  }
+  .panel h2 .sm{
+    font-family:var(--font-mono);
+    font-size:0.7rem;
+    color:var(--chalk-dim);
+    text-transform:uppercase;
+    letter-spacing:0.5px;
+    margin-left:8px;
+    font-weight:400;
+  }
+
+  table{width:100%; border-collapse:collapse; font-size:0.84rem;}
+  th{
+    text-align:left; text-transform:uppercase; letter-spacing:0.5px;
+    font-size:0.68rem; color:var(--chalk-dim); font-weight:500;
+    padding:8px 10px; border-bottom:1px solid var(--line-strong);
+  }
+  td{padding:10px 10px; border-bottom:1px solid var(--line); vertical-align:middle;}
+  tr:last-child td{border-bottom:none;}
+  tr.clickable{cursor:pointer;}
+  tr.clickable:hover td{background:rgba(238,241,232,0.03);}
+
+  .rank{font-family:var(--font-display); font-size:1.1rem; color:var(--chalk-dim); width:28px;}
+  .rank.lead{color:var(--chalk-yellow);}
+  .name{font-weight:600; color:var(--chalk-white);}
+  .name .crown{color:var(--chalk-yellow); margin-right:5px;}
+  .winpct{font-weight:600;}
+  .streak-hot{color:var(--chalk-yellow);}
+  .streak-cold{color:var(--chalk-red);}
+
+  /* tally marks */
+  .tally{display:inline-flex; align-items:flex-end; gap:6px; flex-wrap:wrap;}
+  .tally-group{position:relative; display:flex; gap:2.5px; width:16px; height:16px;}
+  .tally-stroke{width:2px; height:15px; background:currentColor; border-radius:1px; transform:rotate(-6deg);}
+  .tally-group.strike::after{
+    content:""; position:absolute; left:-2px; top:1px; width:22px; height:2px;
+    background:currentColor; transform:rotate(-32deg); border-radius:1px;
+  }
+  .tally.win{color:var(--chalk-green);}
+  .tally.loss{color:var(--chalk-red);}
+  .tally-count{font-size:0.72rem; color:var(--chalk-dim); margin-left:4px; align-self:center;}
+
+  .badge{
+    display:inline-block; padding:2px 8px; border-radius:6px; font-size:0.68rem;
+    letter-spacing:0.4px; text-transform:uppercase; border:1px solid var(--line-strong);
+  }
+  .badge.win{color:var(--chalk-green); border-color:rgba(143,191,159,0.4);}
+  .badge.loss{color:var(--chalk-red); border-color:rgba(217,135,135,0.4);}
+  .badge.pending{color:var(--chalk-dim);}
+  .badge.chalk{color:var(--chalk-blue); border-color:rgba(143,180,201,0.4);}
+  .badge.heavychalk{color:var(--chalk-yellow); border-color:rgba(232,199,107,0.4);}
+  .badge.lock{color:var(--chalk-red); border-color:rgba(217,135,135,0.4);}
+
+  .odds-cell{font-weight:600;}
+  .prob-note{color:var(--chalk-dim); font-size:0.72rem;}
+
+  .week-block{margin-bottom:22px;}
+  .week-block h3{
+    font-family:var(--font-mono); font-size:0.75rem; letter-spacing:0.6px;
+    color:var(--chalk-dim); text-transform:uppercase; margin:0 0 8px;
+    border-bottom:1px dashed var(--line); padding-bottom:6px;
+  }
+
+  .player-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:12px;}
+  .player-card{
+    border:1px solid var(--line); border-radius:var(--radius); padding:14px;
+    cursor:pointer; transition:border-color .15s ease;
+  }
+  .player-card:hover{border-color:var(--line-strong);}
+  .player-card .pname{font-family:var(--font-display); font-size:1.2rem; font-weight:700;}
+  .player-card .prow{margin-top:8px; display:flex; justify-content:space-between; align-items:center;}
+  .back-link{
+    color:var(--chalk-blue); cursor:pointer; font-size:0.78rem; display:inline-block; margin-bottom:12px;
+  }
+  .back-link:hover{color:var(--chalk-white);}
+
+  #loading, #error{
+    text-align:center; padding:60px 20px; color:var(--chalk-dim);
+  }
+  #error{display:none;}
+  #error h2{color:var(--chalk-red); font-family:var(--font-display); font-size:1.6rem;}
+  #error code{
+    display:block; background:rgba(0,0,0,0.3); padding:10px 12px; border-radius:6px;
+    margin-top:10px; font-size:0.78rem; text-align:left; overflow-x:auto; color:var(--chalk-yellow);
+  }
+  #error ol{text-align:left; max-width:520px; margin:16px auto 0; font-size:0.82rem; line-height:1.7;}
+
+  #app{display:none;}
+  footer{text-align:center; color:var(--line-strong); font-size:0.7rem; margin-top:30px;}
+
+  @media (max-width:560px){
+    .wrap{padding:18px 12px 60px;}
+    table{font-size:0.76rem;}
+    th, td{padding:8px 6px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="board">
+    <h1>Play of the Week</h1>
+    <div class="sub">one pick a week &middot; chalk only &middot; best record wins</div>
+    <div class="meta" id="headerMeta">
+      <span class="pill">Week <b id="curWeekLabel">&mdash;</b> / <b id="totalWeeksLabel">&mdash;</b></span>
+      <span class="pill">Threshold <b id="thresholdLabel">&mdash;</b></span>
+      <span class="pill">Players <b id="playerCountLabel">&mdash;</b></span>
+    </div>
+  </header>
+
+  <div id="loading">Chalking up the standings&hellip;</div>
+
+  <div id="error">
+    <h2>Couldn't load the sheet</h2>
+    <p>The page tried to fetch your Google Sheet and came up empty.</p>
+    <ol>
+      <li>In Google Sheets: <b>File &rarr; Share &rarr; Publish to web</b></li>
+      <li>Select the correct tab, choose <b>Comma-separated values (.csv)</b>, click Publish</li>
+      <li>Copy that link into <code>CONFIG.CSV_URL</code> near the top of the &lt;script&gt; tag in this file</li>
+    </ol>
+    <p class="prob-note">Technical detail:</p>
+    <code id="errorDetail"></code>
+  </div>
+
+  <div id="app">
+    <nav class="tabs">
+      <button data-view="standings" class="active">Standings</button>
+      <button data-view="thisweek">This Week</button>
+      <button data-view="history">History</button>
+      <button data-view="players">Players</button>
+    </nav>
+
+    <section class="view active" id="view-standings">
+      <div class="panel">
+        <h2>Season Standings <span class="sm">ranked by win %, then wins</span></h2>
+        <table>
+          <thead>
+            <tr><th></th><th>Player</th><th>Record</th><th>Win%</th><th>Wins</th><th>Losses</th><th>Streak</th></tr>
+          </thead>
+          <tbody id="standingsBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="view" id="view-thisweek">
+      <div class="panel">
+        <h2>This Week's Picks <span class="sm" id="thisWeekSub"></span></h2>
+        <table>
+          <thead>
+            <tr><th>Player</th><th>Pick</th><th>Result</th></tr>
+          </thead>
+          <tbody id="thisWeekBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="view" id="view-history">
+      <div class="panel" id="historyPanel">
+        <h2>Weekly History</h2>
+        <div id="historyBody"></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-players">
+      <div class="panel" id="playersPanel">
+        <h2>Players</h2>
+        <div class="player-grid" id="playersGrid"></div>
+      </div>
+    </section>
+  </div>
+
+  <footer>synced live from your Google Sheet</footer>
+</div>
+
+<script>
+/* ================= CONFIG =================
+   1. Publish the "Form Responses 1" tab: File > Share > Publish to web > CSV > Publish.
+   2. Paste that URL below as CSV_URL.
+   3. Reads: Timestamp | Name | Week | Pick | Result | Submission Status
+      - "Result" can be blank until graded, then Win/Loss (any case).
+      - Only rows where Submission Status = "Official" count — the Form allows
+        re-submitting before lock, which leaves earlier rows marked "Duplicate".
+      - No Odds column is read right now (the Form captures picks as free text,
+        e.g. "Packers -3.5", not structured odds) — add one later if you want
+        odds/implied-win% back on the site.
+   4. Update ROSTER below whenever the group changes.
+============================================= */
+const CONFIG = {
+  CSV_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQf6Tf0chsL5Bd_SLN4uqX_s6itPsXTUoQM_WDXtso0y1IG9zEq-lK3ogh4Bfyqv9PfmRjz7Rm1qA2w/pub?gid=190070689&single=true&output=csv",
+  TOTAL_WEEKS: 18,
+  ODDS_THRESHOLD: -200,
+  // Everyone in the group, so people who haven't picked yet still show up at 0-0.
+  // Names must match the "Name" column in the Form exactly. Add/remove names here as your group changes.
+  ROSTER: ["Adam","Tim","Justin","Dylan","Dom","Joey","Bryce","JR","Kurt","Ryan","Tyler"],
+  COLUMNS: {
+    timestamp: ['timestamp'],
+    name:      ['name','player','who','picked by'],
+    week:      ['week'],
+    pick:      ['pick','team','game','matchup','selection'],
+    odds:      ['odds','line'],
+    result:    ['result','outcome','win/loss','w/l'],
+    status:    ['submission status','status']
+  }
+};
+
+function parseCSV(text){
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for(let i=0;i<text.length;i++){
+    const c = text[i], next = text[i+1];
+    if(inQuotes){
+      if(c === '"' && next === '"'){ field += '"'; i++; }
+      else if(c === '"'){ inQuotes = false; }
+      else { field += c; }
+    } else {
+      if(c === '"'){ inQuotes = true; }
+      else if(c === ','){ row.push(field); field=''; }
+      else if(c === '\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+      else if(c === '\r'){ /* skip */ }
+      else { field += c; }
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r => r.some(c => c.trim() !== ''));
+}
+
+function matchColumn(headers, candidates){
+  const lower = headers.map(h => h.trim().toLowerCase());
+  for(const cand of candidates){
+    const idx = lower.findIndex(h => h === cand);
+    if(idx !== -1) return idx;
+  }
+  for(const cand of candidates){
+    const idx = lower.findIndex(h => h.includes(cand));
+    if(idx !== -1) return idx;
+  }
+  return -1;
+}
+
+function normalizeResult(raw){
+  const r = (raw || '').trim().toLowerCase();
+  if(!r) return 'pending';
+  if(r.startsWith('w')) return 'win';
+  if(r.startsWith('l')) return 'loss';
+  if(r.startsWith('p') && r !== 'pending') return 'push';
+  return 'pending';
+}
+
+function loadRecords(csvText){
+  const rows = parseCSV(csvText);
+  if(rows.length < 2) return [];
+  const headers = rows[0];
+  const idx = {
+    timestamp: matchColumn(headers, CONFIG.COLUMNS.timestamp),
+    name:      matchColumn(headers, CONFIG.COLUMNS.name),
+    week:      matchColumn(headers, CONFIG.COLUMNS.week),
+    pick:      matchColumn(headers, CONFIG.COLUMNS.pick),
+    odds:      matchColumn(headers, CONFIG.COLUMNS.odds),
+    result:    matchColumn(headers, CONFIG.COLUMNS.result),
+    status:    matchColumn(headers, CONFIG.COLUMNS.status),
+  };
+  const records = [];
+  for(let i=1;i<rows.length;i++){
+    const r = rows[i];
+    if(!r || r.every(c => !c || !c.trim())) continue;
+    const name = idx.name !== -1 ? (r[idx.name]||'').trim() : '';
+    if(!name) continue;
+    // Google Form re-submissions create multiple rows per person/week (edits before lock).
+    // Only the row marked "Official" is the real pick — everything else (e.g. "Duplicate") is discarded.
+    if(idx.status !== -1){
+      const statusVal = (r[idx.status] || '').trim().toLowerCase();
+      if(statusVal !== 'official') continue;
+    }
+    records.push({
+      timestamp: idx.timestamp !== -1 ? r[idx.timestamp] : '',
+      name,
+      week: idx.week !== -1 ? Number((r[idx.week]||'').replace(/[^\d.]/g,'')) || null : null,
+      pick: idx.pick !== -1 ? (r[idx.pick]||'').trim() : '',
+      odds: idx.odds !== -1 ? (r[idx.odds]||'').trim() : '',
+      result: normalizeResult(idx.result !== -1 ? r[idx.result] : '')
+    });
+  }
+  return records;
+}
+
+function computeStandings(records){
+  const byName = {};
+  const order = [];
+  (CONFIG.ROSTER || []).forEach(n => {
+    if(!byName[n]){ byName[n] = {name:n, wins:0, losses:0, games:[]}; order.push(n); }
+  });
+  records
+    .slice()
+    .sort((a,b) => (a.week||0) - (b.week||0))
+    .forEach(rec => {
+      if(!byName[rec.name]){
+        byName[rec.name] = {name:rec.name, wins:0, losses:0, games:[]};
+        order.push(rec.name);
+      }
+      const p = byName[rec.name];
+      if(rec.result === 'win') p.wins++;
+      if(rec.result === 'loss') p.losses++;
+      if(rec.result === 'win' || rec.result === 'loss') p.games.push(rec.result);
+    });
+  const standings = order.map(n => {
+    const p = byName[n];
+    const total = p.wins + p.losses;
+    const winPct = total ? p.wins/total : 0;
+    let streak = 0, streakType = null;
+    for(let i=p.games.length-1;i>=0;i--){
+      if(streakType === null){ streakType = p.games[i]; streak = 1; }
+      else if(p.games[i] === streakType){ streak++; }
+      else break;
+    }
+    return {...p, total, winPct, streak, streakType};
+  });
+  standings.sort((a,b) => b.winPct - a.winPct || b.wins - a.wins);
+  return standings;
+}
+
+function renderTally(count, kind){
+  if(!count) return '<span class="prob-note">&mdash;</span>';
+  const groups = [];
+  let remaining = count;
+  while(remaining > 0){
+    const n = Math.min(5, remaining);
+    let strokes = '';
+    for(let i=0;i<n;i++) strokes += '<span class="tally-stroke"></span>';
+    groups.push(`<span class="tally-group${n===5?' strike':''}">${strokes}</span>`);
+    remaining -= n;
+  }
+  return `<span class="tally ${kind}">${groups.join('')}<span class="tally-count">${count}</span></span>`;
+}
+
+function resultBadge(result){
+  if(result === 'win') return '<span class="badge win">Win</span>';
+  if(result === 'loss') return '<span class="badge loss">Loss</span>';
+  if(result === 'push') return '<span class="badge pending">Push</span>';
+  return '<span class="badge pending">Pending</span>';
+}
+
+let ALL_RECORDS = [];
+let ALL_STANDINGS = [];
+
+function renderStandings(){
+  const body = document.getElementById('standingsBody');
+  body.innerHTML = ALL_STANDINGS.map((p, i) => `
+    <tr class="clickable" data-player="${encodeURIComponent(p.name)}">
+      <td class="rank ${i===0 && p.total>0 ? 'lead':''}">${i+1}</td>
+      <td class="name">${i===0 && p.total>0 ? '<span class="crown">&#9733;</span>':''}${p.name}</td>
+      <td>${p.wins}-${p.losses}</td>
+      <td class="winpct">${p.total ? (p.winPct*100).toFixed(0)+'%' : '&mdash;'}</td>
+      <td>${renderTally(p.wins,'win')}</td>
+      <td>${renderTally(p.losses,'loss')}</td>
+      <td class="${p.streak>=2 && p.streakType==='win' ? 'streak-hot' : (p.streak>=2 && p.streakType==='loss' ? 'streak-cold':'')}">
+        ${p.streak ? p.streak + (p.streakType==='win' ? 'W':'L') : '&mdash;'}
+      </td>
+    </tr>
+  `).join('');
+  body.querySelectorAll('tr.clickable').forEach(tr => {
+    tr.addEventListener('click', () => openPlayer(decodeURIComponent(tr.dataset.player)));
+  });
+}
+
+function renderThisWeek(){
+  const weeks = ALL_RECORDS.map(r => r.week).filter(w => w !== null);
+  const curWeek = weeks.length ? Math.max(...weeks) : null;
+  document.getElementById('thisWeekSub').textContent = curWeek ? `week ${curWeek}` : '';
+  const body = document.getElementById('thisWeekBody');
+  const picks = ALL_RECORDS.filter(r => r.week === curWeek);
+  if(!picks.length){
+    body.innerHTML = `<tr><td colspan="3" class="prob-note">No picks logged for this week yet.</td></tr>`;
+    return;
+  }
+  body.innerHTML = picks.map(r => {
+    return `<tr>
+      <td class="name">${r.name}</td>
+      <td>${r.pick || '&mdash;'}</td>
+      <td>${resultBadge(r.result)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderHistory(){
+  const weeks = [...new Set(ALL_RECORDS.map(r => r.week).filter(w => w !== null))].sort((a,b)=>b-a);
+  const container = document.getElementById('historyBody');
+  if(!weeks.length){
+    container.innerHTML = '<p class="prob-note">No weeks logged yet.</p>';
+    return;
+  }
+  container.innerHTML = weeks.map(w => {
+    const picks = ALL_RECORDS.filter(r => r.week === w);
+    const rows = picks.map(r => {
+      return `<tr>
+        <td class="name">${r.name}</td>
+        <td>${r.pick || '&mdash;'}</td>
+        <td>${resultBadge(r.result)}</td>
+      </tr>`;
+    }).join('');
+    return `<div class="week-block">
+      <h3>Week ${w}</h3>
+      <table>
+        <thead><tr><th>Player</th><th>Pick</th><th>Result</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  }).join('');
+}
+
+function renderPlayers(){
+  const grid = document.getElementById('playersGrid');
+  grid.innerHTML = ALL_STANDINGS.map(p => `
+    <div class="player-card" data-player="${encodeURIComponent(p.name)}">
+      <div class="pname">${p.name}</div>
+      <div class="prow">
+        <span class="prob-note">${p.wins}-${p.losses}</span>
+        <span class="winpct">${p.total ? (p.winPct*100).toFixed(0)+'%':'&mdash;'}</span>
+      </div>
+    </div>
+  `).join('');
+  grid.querySelectorAll('.player-card').forEach(card => {
+    card.addEventListener('click', () => openPlayer(decodeURIComponent(card.dataset.player)));
+  });
+}
+
+function openPlayer(name){
+  setActiveView('players');
+  const p = ALL_STANDINGS.find(s => s.name === name);
+  const picks = ALL_RECORDS.filter(r => r.name === name).sort((a,b) => (a.week||0)-(b.week||0));
+  const panel = document.getElementById('playersPanel');
+  const rows = picks.map(r => {
+    return `<tr>
+      <td>${r.week !== null ? 'Wk '+r.week : '&mdash;'}</td>
+      <td>${r.pick || '&mdash;'}</td>
+      <td>${resultBadge(r.result)}</td>
+    </tr>`;
+  }).join('');
+  panel.innerHTML = `
+    <span class="back-link" id="backToPlayers">&larr; all players</span>
+    <h2>${name} <span class="sm">${p ? p.wins+'-'+p.losses+' &middot; '+(p.total?(p.winPct*100).toFixed(0)+'% win rate':'no games yet') : ''}</span></h2>
+    <table>
+      <thead><tr><th>Week</th><th>Pick</th><th>Result</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="3" class="prob-note">No picks yet.</td></tr>'}</tbody>
+    </table>
+  `;
+  document.getElementById('backToPlayers').addEventListener('click', () => {
+    panel.innerHTML = '<h2>Players</h2><div class="player-grid" id="playersGrid"></div>';
+    renderPlayers();
+  });
+}
+
+function setActiveView(view){
+  document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  document.querySelectorAll('section.view').forEach(s => s.classList.toggle('active', s.id === 'view-'+view));
+}
+
+document.querySelectorAll('nav.tabs button').forEach(btn => {
+  btn.addEventListener('click', () => setActiveView(btn.dataset.view));
+});
+
+function updateHeader(){
+  const weeks = ALL_RECORDS.map(r => r.week).filter(w => w !== null);
+  const curWeek = weeks.length ? Math.max(...weeks) : '\u2014';
+  document.getElementById('curWeekLabel').textContent = curWeek;
+  document.getElementById('totalWeeksLabel').textContent = CONFIG.TOTAL_WEEKS;
+  document.getElementById('thresholdLabel').textContent = CONFIG.ODDS_THRESHOLD;
+  document.getElementById('playerCountLabel').textContent = ALL_STANDINGS.length;
+}
+
+function showError(detail){
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('error').style.display = 'block';
+  document.getElementById('errorDetail').textContent = detail;
+}
+
+async function init(){
+  if(!CONFIG.CSV_URL || CONFIG.CSV_URL.includes('PASTE_YOUR')){
+    showError('CONFIG.CSV_URL is not set yet. Paste your published Google Sheet CSV link into the CONFIG object near the top of the <script> tag.');
+    return;
+  }
+  try{
+    const res = await fetch(CONFIG.CSV_URL + (CONFIG.CSV_URL.includes('?') ? '&' : '?') + 'cachebust=' + Date.now());
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    ALL_RECORDS = loadRecords(text);
+    ALL_STANDINGS = computeStandings(ALL_RECORDS);
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    updateHeader();
+    renderStandings();
+    renderThisWeek();
+    renderHistory();
+    renderPlayers();
+  } catch(err){
+    showError(String(err));
+  }
+}
+
+init();
+</script>
+</body>
+</html>
