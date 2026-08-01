@@ -316,11 +316,16 @@
         e.g. "Packers -3.5", not structured odds) — add one later if you want
         odds/implied-win% back on the site.
    4. Update ROSTER below whenever the group changes.
+   5. Set SEASON_START_DATE to the date Week 1 begins (format "YYYY-MM-DD"), once
+      you know it. "This Week" is computed from today's date relative to that —
+      not from whatever's in the sheet — so it stays correct even in a week
+      nobody's picked yet. Until it's set, the site shows a "not started" state.
 ============================================= */
 const CONFIG = {
   CSV_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQf6Tf0chsL5Bd_SLN4uqX_s6itPsXTUoQM_WDXtso0y1IG9zEq-lK3ogh4Bfyqv9PfmRjz7Rm1qA2w/pub?gid=190070689&single=true&output=csv",
   TOTAL_WEEKS: 18,
   ODDS_THRESHOLD: -200,
+  SEASON_START_DATE: null, // e.g. "2026-09-05" — the Monday (or whatever day) Week 1 starts
   // Everyone in the group, so people who haven't picked yet still show up at 0-0.
   // Names must match the "Name" column in the Form exactly. Add/remove names here as your group changes.
   ROSTER: ["Adam","Tim","Justin","Dylan","Dom","Joey","Bryce","JR","Kurt","Ryan","Tyler"],
@@ -334,6 +339,20 @@ const CONFIG = {
     status:    ['submission status','status']
   }
 };
+
+function computeCurrentWeek(){
+  if(!CONFIG.SEASON_START_DATE) return null;
+  const start = new Date(CONFIG.SEASON_START_DATE + 'T00:00:00');
+  if(isNaN(start.getTime())) return null;
+  const now = new Date();
+  const msPerDay = 24*60*60*1000;
+  if(now < start){
+    return {status:'pre', week:0, startsInDays: Math.ceil((start-now)/msPerDay)};
+  }
+  const week = Math.floor((now-start)/(7*msPerDay)) + 1;
+  if(week > CONFIG.TOTAL_WEEKS) return {status:'done', week:CONFIG.TOTAL_WEEKS};
+  return {status:'active', week};
+}
 
 function parseCSV(text){
   const rows = [];
@@ -495,11 +514,23 @@ function renderStandings(){
 }
 
 function renderThisWeek(){
-  const weeks = ALL_RECORDS.map(r => r.week).filter(w => w !== null);
-  const curWeek = weeks.length ? Math.max(...weeks) : null;
-  document.getElementById('thisWeekSub').textContent = curWeek ? `week ${curWeek}` : '';
   const body = document.getElementById('thisWeekBody');
-  const picks = ALL_RECORDS.filter(r => r.week === curWeek);
+  const sub = document.getElementById('thisWeekSub');
+  const info = computeCurrentWeek();
+
+  if(!info){
+    sub.textContent = '';
+    body.innerHTML = `<tr><td colspan="3" class="prob-note">Season start date isn't set yet — add SEASON_START_DATE in the config once you know it.</td></tr>`;
+    return;
+  }
+  if(info.status === 'pre'){
+    sub.textContent = `starts in ${info.startsInDays} day${info.startsInDays===1?'':'s'}`;
+    body.innerHTML = `<tr><td colspan="3" class="prob-note">Season hasn't started yet.</td></tr>`;
+    return;
+  }
+
+  sub.textContent = info.status === 'done' ? 'season complete' : `week ${info.week}`;
+  const picks = ALL_RECORDS.filter(r => r.week === info.week);
   if(!picks.length){
     body.innerHTML = `<tr><td colspan="3" class="prob-note">No picks logged for this week yet.</td></tr>`;
     return;
@@ -591,9 +622,14 @@ document.querySelectorAll('nav.tabs button').forEach(btn => {
 });
 
 function updateHeader(){
-  const weeks = ALL_RECORDS.map(r => r.week).filter(w => w !== null);
-  const curWeek = weeks.length ? Math.max(...weeks) : '\u2014';
-  document.getElementById('curWeekLabel').textContent = curWeek;
+  const info = computeCurrentWeek();
+  let label = '\u2014';
+  if(info){
+    if(info.status === 'pre') label = 'not started';
+    else if(info.status === 'done') label = 'final';
+    else label = info.week;
+  }
+  document.getElementById('curWeekLabel').textContent = label;
   document.getElementById('totalWeeksLabel').textContent = CONFIG.TOTAL_WEEKS;
   document.getElementById('thresholdLabel').textContent = CONFIG.ODDS_THRESHOLD;
   document.getElementById('playerCountLabel').textContent = ALL_STANDINGS.length;
