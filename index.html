@@ -209,6 +209,21 @@
   .badge.heavychalk{color:var(--chalk-yellow); border-color:rgba(232,199,107,0.4);}
   .badge.lock{color:var(--chalk-red); border-color:rgba(217,135,135,0.4);}
 
+  .pick-tag{
+    display:inline-block; margin-left:6px; padding:1px 7px; border-radius:6px;
+    font-size:0.62rem; letter-spacing:0.5px; text-transform:uppercase; font-weight:700;
+    border:1px solid currentColor; vertical-align:middle;
+  }
+  .pick-tag.dotd{color:var(--chalk-red);}
+  .pick-tag.poty{color:var(--chalk-yellow);}
+
+  .dotd-usage{
+    display:inline-block; margin-left:7px; font-family:var(--font-mono); font-size:0.6rem;
+    letter-spacing:0.3px; padding:1px 6px; border-radius:6px;
+    border:1px solid var(--line-strong); color:var(--chalk-dim); vertical-align:middle;
+  }
+  .dotd-usage.over{color:var(--chalk-red); border-color:rgba(184,92,74,0.5);}
+
   .odds-cell{font-weight:600;}
   .prob-note{color:var(--chalk-dim); font-size:0.72rem;}
 
@@ -264,11 +279,9 @@
 
   <header class="board">
     <h1>Play of the Week</h1>
-    <div class="sub">one pick a week &middot; chalk only &middot; best record wins</div>
+    <div class="sub">one pick a week &middot; best record wins</div>
     <div class="meta" id="headerMeta">
       <span class="pill">Week <b id="curWeekLabel">&mdash;</b> / <b id="totalWeeksLabel">&mdash;</b></span>
-      <span class="pill">Threshold <b id="thresholdLabel">&mdash;</b></span>
-      <span class="pill">Players <b id="playerCountLabel">&mdash;</b></span>
     </div>
   </header>
 
@@ -349,7 +362,7 @@
 /* ================= CONFIG =================
    1. Publish the "Form Responses 1" tab: File > Share > Publish to web > CSV > Publish.
    2. Paste that URL below as CSV_URL.
-   3. Reads: Timestamp | Name | Week | Pick | Result | Submission Status
+   3. Reads: Timestamp | Name | Week | Pick | Result | Submission Status | (DOTD/POTY column)
       - "Result" can be blank until graded, then Win/Loss (any case).
       - Only rows where Submission Status = "Official" count — the Form allows
         re-submitting before lock, which leaves earlier rows marked "Duplicate".
@@ -361,11 +374,21 @@
       you know it. "This Week" is computed from today's date relative to that —
       not from whatever's in the sheet — so it stays correct even in a week
       nobody's picked yet. Until it's set, the site shows a "not started" state.
+   6. Scoring: a normal win/loss is worth 1. A DOTD pick is worth
+      DOTD_WIN_CREDIT wins if it hits, DOTD_LOSS_CREDIT losses if it doesn't
+      (odds requirement waived, capped at DOTD_ANNUAL_LIMIT/year). A POTY pick
+      is worth POTY_WIN_CREDIT wins if it hits, POTY_LOSS_CREDIT losses if it
+      doesn't. Adjust the numbers below if the rules change.
 ============================================= */
 const CONFIG = {
-  CSV_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQf6Tf0chsL5Bd_SLN4uqX_s6itPsXTUoQM_WDXtso0y1IG9zEq-lK3ogh4Bfyqv9PfmRjz7Rm1qA2w/pub?gid=190070689&single=true&output=csv",
+  CSV_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQCRC8yeTawObp3vTjHLXzExN2E-6NzA4G-3HJHJ_6bcQ4SA8SXtCwHAqfoAMjPFMBpTyilQQIBdQJU/pub?gid=1013092187&single=true&output=csv",
   TOTAL_WEEKS: 18,
   ODDS_THRESHOLD: -200,
+  DOTD_WIN_CREDIT: 2,
+  DOTD_LOSS_CREDIT: 1,
+  DOTD_ANNUAL_LIMIT: 1,
+  POTY_WIN_CREDIT: 2,
+  POTY_LOSS_CREDIT: 2,
   SEASON_START_DATE: null, // e.g. "2026-09-05" — the Monday (or whatever day) Week 1 starts
   // Everyone in the group, so people who haven't picked yet still show up at 0-0.
   // Names must match the "Name" column in the Form exactly. Add/remove names here as your group changes.
@@ -377,9 +400,18 @@ const CONFIG = {
     pick:      ['pick','team','game','matchup','selection'],
     odds:      ['odds','line'],
     result:    ['result','outcome','win/loss','w/l'],
-    status:    ['submission status','status']
+    status:    ['submission status','status'],
+    pickType:  ['is this your dotd or poty?','dotd or poty','dotd/poty','pick type']
   }
 };
+
+function normalizePickType(raw){
+  const r = (raw || '').trim().toLowerCase();
+  if(r.includes('dotd')) return 'dotd';
+  if(r.includes('poty')) return 'poty';
+  return 'normal';
+}
+
 
 function computeCurrentWeek(){
   if(!CONFIG.SEASON_START_DATE) return null;
@@ -450,6 +482,7 @@ function loadRecords(csvText){
     odds:      matchColumn(headers, CONFIG.COLUMNS.odds),
     result:    matchColumn(headers, CONFIG.COLUMNS.result),
     status:    matchColumn(headers, CONFIG.COLUMNS.status),
+    pickType:  matchColumn(headers, CONFIG.COLUMNS.pickType),
   };
   const records = [];
   for(let i=1;i<rows.length;i++){
@@ -469,7 +502,8 @@ function loadRecords(csvText){
       week: idx.week !== -1 ? Number((r[idx.week]||'').replace(/[^\d.]/g,'')) || null : null,
       pick: idx.pick !== -1 ? (r[idx.pick]||'').trim() : '',
       odds: idx.odds !== -1 ? (r[idx.odds]||'').trim() : '',
-      result: normalizeResult(idx.result !== -1 ? r[idx.result] : '')
+      result: normalizeResult(idx.result !== -1 ? r[idx.result] : ''),
+      pickType: normalizePickType(idx.pickType !== -1 ? r[idx.pickType] : '')
     });
   }
   return records;
@@ -479,19 +513,28 @@ function computeStandings(records){
   const byName = {};
   const order = [];
   (CONFIG.ROSTER || []).forEach(n => {
-    if(!byName[n]){ byName[n] = {name:n, wins:0, losses:0, games:[]}; order.push(n); }
+    if(!byName[n]){ byName[n] = {name:n, wins:0, losses:0, games:[], dotdCount:0}; order.push(n); }
   });
   records
     .slice()
     .sort((a,b) => (a.week||0) - (b.week||0))
     .forEach(rec => {
       if(!byName[rec.name]){
-        byName[rec.name] = {name:rec.name, wins:0, losses:0, games:[]};
+        byName[rec.name] = {name:rec.name, wins:0, losses:0, games:[], dotdCount:0};
         order.push(rec.name);
       }
       const p = byName[rec.name];
-      if(rec.result === 'win') p.wins++;
-      if(rec.result === 'loss') p.losses++;
+      if(rec.pickType === 'dotd') p.dotdCount++;
+      if(rec.result === 'win'){
+        if(rec.pickType === 'dotd') p.wins += CONFIG.DOTD_WIN_CREDIT;
+        else if(rec.pickType === 'poty') p.wins += CONFIG.POTY_WIN_CREDIT;
+        else p.wins += 1;
+      }
+      if(rec.result === 'loss'){
+        if(rec.pickType === 'dotd') p.losses += CONFIG.DOTD_LOSS_CREDIT;
+        else if(rec.pickType === 'poty') p.losses += CONFIG.POTY_LOSS_CREDIT;
+        else p.losses += 1;
+      }
       if(rec.result === 'win' || rec.result === 'loss') p.games.push(rec.result);
     });
   const standings = order.map(n => {
@@ -531,6 +574,18 @@ function resultBadge(result){
   return '<span class="badge pending">Pending</span>';
 }
 
+function pickTag(pickType){
+  if(pickType === 'dotd') return '<span class="pick-tag dotd">DOTD</span>';
+  if(pickType === 'poty') return '<span class="pick-tag poty">POTY</span>';
+  return '';
+}
+
+function dotdUsageTag(count){
+  if(!count) return '';
+  const over = count > CONFIG.DOTD_ANNUAL_LIMIT;
+  return `<span class="dotd-usage${over ? ' over':''}">DOTD ${count}&times;${over ? ' \u26A0' : ''}</span>`;
+}
+
 let ALL_RECORDS = [];
 let ALL_STANDINGS = [];
 
@@ -540,7 +595,7 @@ function renderStandings(){
   body.innerHTML = ALL_STANDINGS.map((p, i) => `
     <tr class="clickable" data-player="${encodeURIComponent(p.name)}">
       <td class="rank">${i<3 && p.total>0 ? `<span class="medal ${medalClass[i]}">${i+1}</span>` : (i+1)}</td>
-      <td class="name">${p.name}</td>
+      <td class="name">${p.name}${dotdUsageTag(p.dotdCount)}</td>
       <td>${p.wins}-${p.losses}</td>
       <td class="winpct">${p.total ? (p.winPct*100).toFixed(0)+'%' : '&mdash;'}</td>
       <td>${renderTally(p.wins,'win')}</td>
@@ -580,7 +635,7 @@ function renderThisWeek(){
   body.innerHTML = picks.map(r => {
     return `<tr>
       <td class="name">${r.name}</td>
-      <td>${r.pick || '&mdash;'}</td>
+      <td>${r.pick || '&mdash;'}${pickTag(r.pickType)}</td>
       <td>${resultBadge(r.result)}</td>
     </tr>`;
   }).join('');
@@ -598,7 +653,7 @@ function renderHistory(){
     const rows = picks.map(r => {
       return `<tr>
         <td class="name">${r.name}</td>
-        <td>${r.pick || '&mdash;'}</td>
+        <td>${r.pick || '&mdash;'}${pickTag(r.pickType)}</td>
         <td>${resultBadge(r.result)}</td>
       </tr>`;
     }).join('');
@@ -636,13 +691,13 @@ function openPlayer(name){
   const rows = picks.map(r => {
     return `<tr>
       <td>${r.week !== null ? 'Wk '+r.week : '&mdash;'}</td>
-      <td>${r.pick || '&mdash;'}</td>
+      <td>${r.pick || '&mdash;'}${pickTag(r.pickType)}</td>
       <td>${resultBadge(r.result)}</td>
     </tr>`;
   }).join('');
   panel.innerHTML = `
     <span class="back-link" id="backToPlayers">&larr; all players</span>
-    <h2>${name} <span class="sm">${p ? p.wins+'-'+p.losses+' &middot; '+(p.total?(p.winPct*100).toFixed(0)+'% win rate':'no games yet') : ''}</span></h2>
+    <h2>${name}${dotdUsageTag(p ? p.dotdCount : 0)} <span class="sm">${p ? p.wins+'-'+p.losses+' &middot; '+(p.total?(p.winPct*100).toFixed(0)+'% win rate':'no games yet') : ''}</span></h2>
     <table>
       <thead><tr><th>Week</th><th>Pick</th><th>Result</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="3" class="prob-note">No picks yet.</td></tr>'}</tbody>
@@ -673,8 +728,6 @@ function updateHeader(){
   }
   document.getElementById('curWeekLabel').textContent = label;
   document.getElementById('totalWeeksLabel').textContent = CONFIG.TOTAL_WEEKS;
-  document.getElementById('thresholdLabel').textContent = CONFIG.ODDS_THRESHOLD;
-  document.getElementById('playerCountLabel').textContent = ALL_STANDINGS.length;
 }
 
 function showError(detail){
