@@ -14,7 +14,7 @@
     --chalk-white:#F1EDE1;
     --chalk-dim:#8FA0BE;
     --chalk-yellow:#C9A227;
-    --chalk-green:#C9A227;
+    --chalk-green:#3FA66D;
     --chalk-red:#B85C4A;
     --chalk-blue:#8FA0BE;
     --line: rgba(201,162,39,0.16);
@@ -141,6 +141,25 @@
     font-weight:400;
   }
 
+  .submit-panel{text-align:center; padding:36px 24px 40px;}
+  .submit-copy{
+    color:var(--chalk-dim); font-size:0.88rem; line-height:1.6;
+    max-width:420px; margin:0 auto 24px;
+  }
+  .submit-btn{
+    display:inline-block;
+    background:linear-gradient(145deg,var(--gold-bright),var(--chalk-yellow));
+    color:var(--board-bg);
+    font-family:var(--font-mono); font-weight:700; font-size:0.85rem;
+    letter-spacing:0.3px;
+    text-decoration:none;
+    padding:13px 28px;
+    border-radius:8px;
+    transition:transform .15s ease, box-shadow .15s ease;
+    box-shadow:0 4px 16px rgba(201,162,39,0.25);
+  }
+  .submit-btn:hover{transform:translateY(-1px); box-shadow:0 6px 20px rgba(201,162,39,0.35);}
+
   table{width:100%; border-collapse:collapse; font-size:0.84rem;}
   th{
     text-align:left; text-transform:uppercase; letter-spacing:0.5px;
@@ -199,6 +218,12 @@
     color:var(--chalk-dim); text-transform:uppercase; margin:0 0 8px;
     border-bottom:1px dashed var(--line); padding-bottom:6px;
   }
+  /* fixed layout so every week's table lines up under the next, regardless of content length */
+  .week-block table{table-layout:fixed;}
+  .week-block th:nth-child(1), .week-block td:nth-child(1){width:26%;}
+  .week-block th:nth-child(2), .week-block td:nth-child(2){width:48%;}
+  .week-block th:nth-child(3), .week-block td:nth-child(3){width:26%;}
+  .week-block td{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 
   .player-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:12px;}
   .player-card{
@@ -263,11 +288,20 @@
 
   <div id="app">
     <nav class="tabs">
+      <button data-view="submit">Submit Pick</button>
       <button data-view="standings" class="active">Standings</button>
       <button data-view="thisweek">This Week</button>
       <button data-view="history">History</button>
       <button data-view="players">Players</button>
     </nav>
+
+    <section class="view" id="view-submit">
+      <div class="panel submit-panel">
+        <h2>Make Your Pick</h2>
+        <p class="submit-copy">One game, under &minus;200, once a week. Submit through the form &mdash; it'll ask for a screenshot of your bet slip to confirm it.</p>
+        <a class="submit-btn" href="https://forms.gle/oTVjsyrjn7J2AUhs8" target="_blank" rel="noopener">Open the Pick Form &rarr;</a>
+      </div>
+    </section>
 
     <section class="view active" id="view-standings">
       <div class="panel">
