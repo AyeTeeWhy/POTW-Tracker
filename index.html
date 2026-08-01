@@ -217,12 +217,18 @@
   .pick-tag.dotd{color:var(--chalk-red);}
   .pick-tag.poty{color:var(--chalk-yellow);}
 
-  .dotd-usage{
-    display:inline-block; margin-left:7px; font-family:var(--font-mono); font-size:0.6rem;
-    letter-spacing:0.3px; padding:1px 6px; border-radius:6px;
-    border:1px solid var(--line-strong); color:var(--chalk-dim); vertical-align:middle;
+  .table-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch;}
+
+  .usage-pill{
+    display:inline-flex; align-items:center; gap:3px;
+    padding:2px 8px; border-radius:6px; font-size:0.76rem;
+    font-family:var(--font-mono); font-weight:700;
+    border:1px solid var(--line); color:var(--chalk-dim);
+    opacity:0.4; white-space:nowrap;
   }
-  .dotd-usage.over{color:var(--chalk-red); border-color:rgba(184,92,74,0.5);}
+  .usage-pill.active{opacity:1; border-color:var(--line-strong); color:var(--chalk-white);}
+  .usage-pill.poty.active{border-color:rgba(232,199,107,0.5); color:var(--gold-bright);}
+  .usage-pill.over{opacity:1; border-color:rgba(184,92,74,0.6); color:var(--chalk-red); background:rgba(184,92,74,0.08);}
 
   .odds-cell{font-weight:600;}
   .prob-note{color:var(--chalk-dim); font-size:0.72rem;}
@@ -319,12 +325,14 @@
     <section class="view active" id="view-standings">
       <div class="panel">
         <h2>Season Standings <span class="sm">ranked by win %, then wins</span></h2>
+        <div class="table-scroll">
         <table>
           <thead>
-            <tr><th></th><th>Player</th><th>Record</th><th>Win%</th><th>Wins</th><th>Losses</th><th>Streak</th></tr>
+            <tr><th></th><th>Player</th><th>Record</th><th>Win%</th><th>Wins</th><th>Losses</th><th>Streak</th><th>DOTD</th><th>POTY</th></tr>
           </thead>
           <tbody id="standingsBody"></tbody>
         </table>
+        </div>
       </div>
     </section>
 
@@ -513,18 +521,19 @@ function computeStandings(records){
   const byName = {};
   const order = [];
   (CONFIG.ROSTER || []).forEach(n => {
-    if(!byName[n]){ byName[n] = {name:n, wins:0, losses:0, games:[], dotdCount:0}; order.push(n); }
+    if(!byName[n]){ byName[n] = {name:n, wins:0, losses:0, games:[], dotdCount:0, potyCount:0}; order.push(n); }
   });
   records
     .slice()
     .sort((a,b) => (a.week||0) - (b.week||0))
     .forEach(rec => {
       if(!byName[rec.name]){
-        byName[rec.name] = {name:rec.name, wins:0, losses:0, games:[], dotdCount:0};
+        byName[rec.name] = {name:rec.name, wins:0, losses:0, games:[], dotdCount:0, potyCount:0};
         order.push(rec.name);
       }
       const p = byName[rec.name];
       if(rec.pickType === 'dotd') p.dotdCount++;
+      if(rec.pickType === 'poty') p.potyCount++;
       if(rec.result === 'win'){
         if(rec.pickType === 'dotd') p.wins += CONFIG.DOTD_WIN_CREDIT;
         else if(rec.pickType === 'poty') p.wins += CONFIG.POTY_WIN_CREDIT;
@@ -580,10 +589,12 @@ function pickTag(pickType){
   return '';
 }
 
-function dotdUsageTag(count){
-  if(!count) return '';
-  const over = count > CONFIG.DOTD_ANNUAL_LIMIT;
-  return `<span class="dotd-usage${over ? ' over':''}">DOTD ${count}&times;${over ? ' \u26A0' : ''}</span>`;
+function usageCell(kind, count){
+  const icon = kind === 'dotd' ? '\u{1F415}' : '\u{1F3C6}'; // dog / trophy
+  const over = kind === 'dotd' && count > CONFIG.DOTD_ANNUAL_LIMIT;
+  const active = count > 0;
+  const cls = over ? 'over' : (active ? 'active' : '');
+  return `<span class="usage-pill ${kind} ${cls}">${icon} ${count}${over ? ' \u26A0' : ''}</span>`;
 }
 
 let ALL_RECORDS = [];
@@ -595,7 +606,7 @@ function renderStandings(){
   body.innerHTML = ALL_STANDINGS.map((p, i) => `
     <tr class="clickable" data-player="${encodeURIComponent(p.name)}">
       <td class="rank">${i<3 && p.total>0 ? `<span class="medal ${medalClass[i]}">${i+1}</span>` : (i+1)}</td>
-      <td class="name">${p.name}${dotdUsageTag(p.dotdCount)}</td>
+      <td class="name">${p.name}</td>
       <td>${p.wins}-${p.losses}</td>
       <td class="winpct">${p.total ? (p.winPct*100).toFixed(0)+'%' : '&mdash;'}</td>
       <td>${renderTally(p.wins,'win')}</td>
@@ -603,6 +614,8 @@ function renderStandings(){
       <td class="${p.streak>=2 && p.streakType==='win' ? 'streak-hot' : (p.streak>=2 && p.streakType==='loss' ? 'streak-cold':'')}">
         ${p.streak ? p.streak + (p.streakType==='win' ? 'W':'L') : '&mdash;'}
       </td>
+      <td>${usageCell('dotd', p.dotdCount)}</td>
+      <td>${usageCell('poty', p.potyCount)}</td>
     </tr>
   `).join('');
   body.querySelectorAll('tr.clickable').forEach(tr => {
@@ -697,7 +710,7 @@ function openPlayer(name){
   }).join('');
   panel.innerHTML = `
     <span class="back-link" id="backToPlayers">&larr; all players</span>
-    <h2>${name}${dotdUsageTag(p ? p.dotdCount : 0)} <span class="sm">${p ? p.wins+'-'+p.losses+' &middot; '+(p.total?(p.winPct*100).toFixed(0)+'% win rate':'no games yet') : ''}</span></h2>
+    <h2>${name} ${p ? usageCell('dotd', p.dotdCount) + ' ' + usageCell('poty', p.potyCount) : ''} <span class="sm">${p ? p.wins+'-'+p.losses+' &middot; '+(p.total?(p.winPct*100).toFixed(0)+'% win rate':'no games yet') : ''}</span></h2>
     <table>
       <thead><tr><th>Week</th><th>Pick</th><th>Result</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="3" class="prob-note">No picks yet.</td></tr>'}</tbody>
