@@ -189,18 +189,6 @@
   .streak-hot{color:var(--chalk-yellow);}
   .streak-cold{color:var(--chalk-red);}
 
-  /* tally marks */
-  .tally{display:inline-flex; align-items:flex-end; gap:6px; flex-wrap:wrap;}
-  .tally-group{position:relative; display:flex; gap:2.5px; width:16px; height:16px;}
-  .tally-stroke{width:2px; height:15px; background:currentColor; border-radius:1px;}
-  .tally-group.strike::after{
-    content:""; position:absolute; left:-2px; top:1px; width:22px; height:2px;
-    background:currentColor; transform:rotate(-28deg); border-radius:1px;
-  }
-  .tally.win{color:var(--chalk-green);}
-  .tally.loss{color:var(--chalk-red);}
-  .tally-count{font-size:0.72rem; color:var(--chalk-dim); margin-left:4px; align-self:center;}
-
   .badge{
     display:inline-block; padding:2px 8px; border-radius:6px; font-size:0.68rem;
     letter-spacing:0.4px; text-transform:uppercase; border:1px solid var(--line-strong);
@@ -347,7 +335,7 @@
         <div class="table-scroll">
         <table>
           <thead>
-            <tr><th></th><th>Player</th><th>Record</th><th>Win%</th><th>Wins</th><th>Losses</th><th>Streak</th><th>DOTD</th><th>POTY</th></tr>
+            <tr><th></th><th>Player</th><th>Record</th><th>Win%</th><th>Streak</th><th>DOTD</th><th>POTY</th></tr>
           </thead>
           <tbody id="standingsBody"></tbody>
         </table>
@@ -582,20 +570,6 @@ function computeStandings(records){
   return standings;
 }
 
-function renderTally(count, kind){
-  if(!count) return '<span class="prob-note">&mdash;</span>';
-  const groups = [];
-  let remaining = count;
-  while(remaining > 0){
-    const n = Math.min(5, remaining);
-    let strokes = '';
-    for(let i=0;i<n;i++) strokes += '<span class="tally-stroke"></span>';
-    groups.push(`<span class="tally-group${n===5?' strike':''}">${strokes}</span>`);
-    remaining -= n;
-  }
-  return `<span class="tally ${kind}">${groups.join('')}<span class="tally-count">${count}</span></span>`;
-}
-
 function resultBadge(result){
   if(result === 'win') return '<span class="badge win">Win</span>';
   if(result === 'loss') return '<span class="badge loss">Loss</span>';
@@ -629,8 +603,6 @@ function renderStandings(){
       <td class="name">${p.name}</td>
       <td>${p.wins}-${p.losses}</td>
       <td class="winpct">${p.total ? (p.winPct*100).toFixed(0)+'%' : '&mdash;'}</td>
-      <td>${renderTally(p.wins,'win')}</td>
-      <td>${renderTally(p.losses,'loss')}</td>
       <td class="${p.streak>=2 && p.streakType==='win' ? 'streak-hot' : (p.streak>=2 && p.streakType==='loss' ? 'streak-cold':'')}">
         ${p.streak ? p.streak + (p.streakType==='win' ? 'W':'L') : '&mdash;'}
       </td>
