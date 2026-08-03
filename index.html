@@ -144,7 +144,7 @@
     font-weight:400;
   }
 
-  .submit-panel{text-align:center; padding:28px 24px;}
+  .header-submit{text-align:center; margin-top:20px; padding-top:18px; border-top:1px solid var(--line);}
   .submit-copy{
     color:var(--chalk-dim); font-size:0.88rem; line-height:1.6;
     max-width:420px; margin:0 auto 24px;
@@ -301,6 +301,10 @@
     <div class="meta" id="headerMeta">
       <span class="pill">Week <b id="curWeekLabel">&mdash;</b> / <b id="totalWeeksLabel">&mdash;</b></span>
     </div>
+    <div class="header-submit">
+      <p class="submit-copy">One game, under &minus;120 or under, once a week. If one game is DOTD must be +200. Submit through the form &mdash; it'll ask for a screenshot of your bet slip to confirm it.</p>
+      <a class="submit-btn" href="https://forms.gle/oTVjsyrjn7J2AUhs8" target="_blank" rel="noopener">Submit Your Pick &rarr;</a>
+    </div>
   </header>
 
   <div id="loading">Chalking up the standings&hellip;</div>
@@ -319,13 +323,13 @@
 
   <div id="app">
     <nav class="tabs">
-      <button data-view="standings" class="active">Standings</button>
-      <button data-view="thisweek">This Week</button>
+      <button data-view="thisweek" class="active">This Week</button>
+      <button data-view="standings">Standings</button>
       <button data-view="history">History</button>
       <button data-view="players">Players</button>
     </nav>
 
-    <section class="view active" id="view-standings">
+    <section class="view" id="view-standings">
       <div class="panel">
         <h2>Season Standings <span class="sm">ranked by win %, then wins</span></h2>
         <div class="table-scroll-wrap">
@@ -341,12 +345,7 @@
       </div>
     </section>
 
-    <section class="view" id="view-thisweek">
-      <div class="panel submit-panel">
-        <h2>Make Your Pick</h2>
-        <p class="submit-copy">One game, under &minus;120 or under, once a week. If one game is DOTD must be +200. Submit through the form &mdash; it'll ask for a screenshot of your bet slip to confirm it.</p>
-        <a class="submit-btn" href="https://forms.gle/oTVjsyrjn7J2AUhs8" target="_blank" rel="noopener">Open the Pick Form &rarr;</a>
-      </div>
+    <section class="view active" id="view-thisweek">
       <div class="panel">
         <h2>This Week's Picks <span class="sm" id="thisWeekSub"></span></h2>
         <table>
