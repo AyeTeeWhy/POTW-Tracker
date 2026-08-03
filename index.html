@@ -208,6 +208,11 @@
   .pick-tag.dotd{color:var(--chalk-red);}
   .pick-tag.poty{color:var(--chalk-yellow);}
   .pick-tag.over{background:rgba(184,92,74,0.18); border-color:var(--chalk-red); color:var(--chalk-red); font-weight:800;}
+  .pick-tag.invalid{background:rgba(184,92,74,0.18); border-color:var(--chalk-red); color:var(--chalk-red); font-weight:800;}
+
+  tr.pick-invalid td{background:rgba(184,92,74,0.09);}
+  .pick-invalid-note{display:block; font-size:0.7rem; color:var(--chalk-red); margin-top:3px;}
+  .pick-time{display:block; font-size:0.68rem; color:var(--chalk-dim); margin-top:2px; font-weight:400;}
 
   .table-scroll-wrap{position:relative;}
   .table-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch;}
@@ -247,7 +252,7 @@
   .week-block th:nth-child(1), .week-block td:nth-child(1){width:26%;}
   .week-block th:nth-child(2), .week-block td:nth-child(2){width:48%;}
   .week-block th:nth-child(3), .week-block td:nth-child(3){width:26%;}
-  .week-block td{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .week-block td{overflow-wrap:break-word;}
 
   .player-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:12px;}
   .player-card{
@@ -546,6 +551,37 @@ function loadRecords(csvText){
   return records;
 }
 
+// Same team+line picked by two different people in the same week isn't
+// allowed. `records` is already in the sheet's natural top-to-bottom order,
+// which is submission order — so the first time a (week, pick) combo is seen
+// is the valid one, and every later match that week is flagged invalid,
+// pointing back at whoever had it first. This does NOT touch scoring; it's
+// purely a visibility flag for This Week / History / Player pages.
+function normalizePickForMatch(pick){
+  return (pick || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function flagDuplicatePicks(records){
+  const seen = {}; // "week|normalized pick" -> name of the first person to have it
+  records.forEach(rec => {
+    if(rec.week === null || !rec.pick) return;
+    const key = rec.week + '|' + normalizePickForMatch(rec.pick);
+    if(seen[key]){
+      rec.pickInvalid = true;
+      rec.pickInvalidBy = seen[key];
+    } else {
+      seen[key] = rec.name;
+    }
+  });
+}
+
+function formatTimestamp(ts){
+  if(!ts) return '';
+  const d = new Date(ts.trim().replace(' ', 'T'));
+  if(isNaN(d.getTime())) return '';
+  return d.toLocaleString('en-US', {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
+}
+
 function computeStandings(records){
   const byName = {};
   const order = [];
@@ -666,9 +702,9 @@ function renderThisWeek(){
     return;
   }
   body.innerHTML = picks.map(r => {
-    return `<tr>
-      <td class="name">${r.name}</td>
-      <td>${r.pick || '&mdash;'}${pickTag(r.pickType, r.pickType==='dotd'?r.dotdSeq:r.potySeq)}</td>
+    return `<tr class="${r.pickInvalid ? 'pick-invalid' : ''}">
+      <td class="name">${r.name}<span class="pick-time">${formatTimestamp(r.timestamp)}</span></td>
+      <td>${r.pick || '&mdash;'}${pickTag(r.pickType, r.pickType==='dotd'?r.dotdSeq:r.potySeq)}${r.pickInvalid ? `<span class="pick-tag invalid">NOT VALID</span><span class="pick-invalid-note">&#9888; already taken this week by ${r.pickInvalidBy}</span>` : ''}</td>
       <td>${resultBadge(r.result)}</td>
     </tr>`;
   }).join('');
@@ -684,9 +720,9 @@ function renderHistory(){
   container.innerHTML = weeks.map(w => {
     const picks = ALL_RECORDS.filter(r => r.week === w);
     const rows = picks.map(r => {
-      return `<tr>
-        <td class="name">${r.name}</td>
-        <td>${r.pick || '&mdash;'}${pickTag(r.pickType, r.pickType==='dotd'?r.dotdSeq:r.potySeq)}</td>
+      return `<tr class="${r.pickInvalid ? 'pick-invalid' : ''}">
+        <td class="name">${r.name}<span class="pick-time">${formatTimestamp(r.timestamp)}</span></td>
+        <td>${r.pick || '&mdash;'}${pickTag(r.pickType, r.pickType==='dotd'?r.dotdSeq:r.potySeq)}${r.pickInvalid ? `<span class="pick-tag invalid">NOT VALID</span><span class="pick-invalid-note">&#9888; already taken this week by ${r.pickInvalidBy}</span>` : ''}</td>
         <td>${resultBadge(r.result)}</td>
       </tr>`;
     }).join('');
@@ -722,9 +758,9 @@ function openPlayer(name){
   const picks = ALL_RECORDS.filter(r => r.name === name).sort((a,b) => (a.week||0)-(b.week||0));
   const panel = document.getElementById('playersPanel');
   const rows = picks.map(r => {
-    return `<tr>
-      <td>${r.week !== null ? 'Wk '+r.week : '&mdash;'}</td>
-      <td>${r.pick || '&mdash;'}${pickTag(r.pickType, r.pickType==='dotd'?r.dotdSeq:r.potySeq)}</td>
+    return `<tr class="${r.pickInvalid ? 'pick-invalid' : ''}">
+      <td>${r.week !== null ? 'Wk '+r.week : '&mdash;'}<span class="pick-time">${formatTimestamp(r.timestamp)}</span></td>
+      <td>${r.pick || '&mdash;'}${pickTag(r.pickType, r.pickType==='dotd'?r.dotdSeq:r.potySeq)}${r.pickInvalid ? `<span class="pick-tag invalid">NOT VALID</span><span class="pick-invalid-note">&#9888; already taken this week by ${r.pickInvalidBy}</span>` : ''}</td>
       <td>${resultBadge(r.result)}</td>
     </tr>`;
   }).join('');
@@ -780,6 +816,7 @@ async function init(){
     if(!res.ok) throw new Error('HTTP ' + res.status);
     const text = await res.text();
     ALL_RECORDS = loadRecords(text);
+    flagDuplicatePicks(ALL_RECORDS);
     ALL_STANDINGS = computeStandings(ALL_RECORDS);
     document.getElementById('loading').style.display = 'none';
     document.getElementById('app').style.display = 'block';
