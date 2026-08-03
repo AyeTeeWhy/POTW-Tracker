@@ -207,6 +207,7 @@
   }
   .pick-tag.dotd{color:var(--chalk-red);}
   .pick-tag.poty{color:var(--chalk-yellow);}
+  .pick-tag.over{background:rgba(184,92,74,0.18); border-color:var(--chalk-red); color:var(--chalk-red); font-weight:800;}
 
   .table-scroll-wrap{position:relative;}
   .table-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch;}
@@ -408,6 +409,7 @@ const CONFIG = {
   DOTD_WIN_CREDIT: 2,
   DOTD_LOSS_CREDIT: 1,
   DOTD_ANNUAL_LIMIT: 1,
+  POTY_ANNUAL_LIMIT: 1,
   POTY_WIN_CREDIT: 2,
   POTY_LOSS_CREDIT: 2,
   SEASON_START_DATE: "2026-09-08", // Tue Sep 8, 2026, 12:00am Eastern — Week 1 start
@@ -559,8 +561,8 @@ function computeStandings(records){
         order.push(rec.name);
       }
       const p = byName[rec.name];
-      if(rec.pickType === 'dotd') p.dotdCount++;
-      if(rec.pickType === 'poty') p.potyCount++;
+      if(rec.pickType === 'dotd'){ p.dotdCount++; rec.dotdSeq = p.dotdCount; }
+      if(rec.pickType === 'poty'){ p.potyCount++; rec.potySeq = p.potyCount; }
       if(rec.result === 'win'){
         if(rec.pickType === 'dotd') p.wins += CONFIG.DOTD_WIN_CREDIT;
         else if(rec.pickType === 'poty') p.wins += CONFIG.POTY_WIN_CREDIT;
@@ -596,15 +598,22 @@ function resultBadge(result){
   return '<span class="badge pending">Pending</span>';
 }
 
-function pickTag(pickType){
-  if(pickType === 'dotd') return '<span class="pick-tag dotd">DOTD</span>';
-  if(pickType === 'poty') return '<span class="pick-tag poty">POTY</span>';
+function pickTag(pickType, seq){
+  if(pickType === 'dotd'){
+    const over = seq && seq > CONFIG.DOTD_ANNUAL_LIMIT;
+    return `<span class="pick-tag dotd${over ? ' over':''}">DOTD${over ? ' \u26A0':''}</span>`;
+  }
+  if(pickType === 'poty'){
+    const over = seq && seq > CONFIG.POTY_ANNUAL_LIMIT;
+    return `<span class="pick-tag poty${over ? ' over':''}">POTY${over ? ' \u26A0':''}</span>`;
+  }
   return '';
 }
 
 function usageCell(kind, count){
   const icon = kind === 'dotd' ? '\u{1F415}' : '\u{1F3C6}'; // dog / trophy
-  const over = kind === 'dotd' && count > CONFIG.DOTD_ANNUAL_LIMIT;
+  const limit = kind === 'dotd' ? CONFIG.DOTD_ANNUAL_LIMIT : CONFIG.POTY_ANNUAL_LIMIT;
+  const over = count > limit;
   const active = count > 0;
   const cls = over ? 'over' : (active ? 'active' : '');
   return `<span class="usage-pill ${kind} ${cls}">${icon} ${count}${over ? ' \u26A0' : ''}</span>`;
@@ -659,7 +668,7 @@ function renderThisWeek(){
   body.innerHTML = picks.map(r => {
     return `<tr>
       <td class="name">${r.name}</td>
-      <td>${r.pick || '&mdash;'}${pickTag(r.pickType)}</td>
+      <td>${r.pick || '&mdash;'}${pickTag(r.pickType, r.pickType==='dotd'?r.dotdSeq:r.potySeq)}</td>
       <td>${resultBadge(r.result)}</td>
     </tr>`;
   }).join('');
@@ -677,7 +686,7 @@ function renderHistory(){
     const rows = picks.map(r => {
       return `<tr>
         <td class="name">${r.name}</td>
-        <td>${r.pick || '&mdash;'}${pickTag(r.pickType)}</td>
+        <td>${r.pick || '&mdash;'}${pickTag(r.pickType, r.pickType==='dotd'?r.dotdSeq:r.potySeq)}</td>
         <td>${resultBadge(r.result)}</td>
       </tr>`;
     }).join('');
@@ -715,7 +724,7 @@ function openPlayer(name){
   const rows = picks.map(r => {
     return `<tr>
       <td>${r.week !== null ? 'Wk '+r.week : '&mdash;'}</td>
-      <td>${r.pick || '&mdash;'}${pickTag(r.pickType)}</td>
+      <td>${r.pick || '&mdash;'}${pickTag(r.pickType, r.pickType==='dotd'?r.dotdSeq:r.potySeq)}</td>
       <td>${resultBadge(r.result)}</td>
     </tr>`;
   }).join('');
