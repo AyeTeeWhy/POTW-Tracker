@@ -163,10 +163,13 @@
   }
   .submit-btn:hover{transform:translateY(-1px); box-shadow:0 6px 20px rgba(201,162,39,0.35);}
   .submit-btn.secondary{
-    background:transparent; color:var(--gold-bright); border:1px solid var(--line-strong);
-    box-shadow:none; margin-top:12px; padding:10px 22px; font-size:0.78rem;
+    background:linear-gradient(145deg,#8c2e3d,#6b1f2c); color:#fff; border:none;
+    box-shadow:0 4px 16px rgba(107,31,44,0.35); margin-top:12px;
   }
-  .submit-btn.secondary:hover{background:rgba(201,162,39,0.08); transform:translateY(-1px); box-shadow:none;}
+  .submit-btn.secondary:hover{
+    background:linear-gradient(145deg,#9c3646,#7a2634);
+    transform:translateY(-1px); box-shadow:0 6px 20px rgba(107,31,44,0.45);
+  }
 
   table{width:100%; border-collapse:collapse; font-size:0.84rem;}
   th{
@@ -249,7 +252,7 @@
   }
   .season-long-pick.sl-win{color:var(--chalk-green);}
   .season-long-pick.sl-loss{color:var(--chalk-red);}
-  .season-long-pick.sl-pending{color:var(--chalk-dim);}
+  .season-long-pick.sl-pending{color:var(--chalk-white);}
 
   .odds-cell{font-weight:600;}
   .prob-note{color:var(--chalk-dim); font-size:0.72rem;}
