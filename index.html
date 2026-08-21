@@ -238,6 +238,14 @@
   .usage-pill.poty.active{border-color:rgba(232,199,107,0.5); color:var(--gold-bright);}
   .usage-pill.over{opacity:1; border-color:rgba(184,92,74,0.6); color:var(--chalk-red); background:rgba(184,92,74,0.08);}
 
+  .season-long-pick{
+    display:inline-block; max-width:170px; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; vertical-align:bottom; font-size:0.78rem;
+  }
+  .season-long-pick.sl-win{color:var(--chalk-green);}
+  .season-long-pick.sl-loss{color:var(--chalk-red);}
+  .season-long-pick.sl-pending{color:var(--chalk-dim);}
+
   .odds-cell{font-weight:600;}
   .prob-note{color:var(--chalk-dim); font-size:0.72rem;}
 
@@ -302,7 +310,7 @@
       <span class="pill">Week <b id="curWeekLabel">&mdash;</b> / <b id="totalWeeksLabel">&mdash;</b></span>
     </div>
     <div class="header-submit">
-      <p class="submit-copy">One game, under &minus;120 or under, once a week. If one game is DOTD must be +200. Submit through the form &mdash; it'll ask for a screenshot of your bet slip to confirm it.</p>
+      <p class="submit-copy">One game, under &minus;120 or under, once a week. If one game is Dog of the Day (DOTD) must be +200. Submit through the form &mdash; it'll ask for a screenshot of your bet slip to confirm it.</p>
       <a class="submit-btn" href="https://forms.gle/oTVjsyrjn7J2AUhs8" target="_blank" rel="noopener">Submit Your Pick &rarr;</a>
     </div>
   </header>
@@ -336,7 +344,7 @@
         <div class="table-scroll">
         <table>
           <thead>
-            <tr><th></th><th>Player</th><th>Record</th><th>Win%</th><th>Streak</th><th>DOTD</th><th>POTY</th></tr>
+            <tr><th></th><th>Player</th><th>Record</th><th>Win%</th><th>Streak</th><th>DOTD</th><th>POTY</th><th>&#127919; Season Long</th></tr>
           </thead>
           <tbody id="standingsBody"></tbody>
         </table>
@@ -388,7 +396,7 @@
         odds/implied-win% back on the site.
    4. Update ROSTER below whenever the group changes.
    5. SEASON_START_DATE is the calendar date (Eastern time) Week 1 begins —
-      currently set to Tue Sep 8, 2026. Each week runs Tue 12:00am through the
+      currently set to Tue Sep 1, 2026. Each week runs Tue 12:01am through the
       following Mon 11:59pm Eastern, 7 days, regardless of where a visitor is
       viewing from (the site anchors to America/New_York, not the browser's
       local time zone, and correctly handles the EDT->EST fallback partway
@@ -412,7 +420,7 @@ const CONFIG = {
   POTY_ANNUAL_LIMIT: 1,
   POTY_WIN_CREDIT: 2,
   POTY_LOSS_CREDIT: 2,
-  SEASON_START_DATE: "2026-09-08", // Tue Sep 8, 2026, 12:00am Eastern — Week 1 start
+  SEASON_START_DATE: "2026-09-01", // Tue Sep 1, 2026, 12:01am Eastern — Week 1 start
   // Everyone in the group, so people who haven't picked yet still show up at 0-0.
   // Names must match the "Name" column in the Form exactly. Add/remove names here as your group changes.
   ROSTER: ["Adam","Tim","Justin","Dylan","Dom","Joey","Bryce","JR","Kurt","Ryan","Tyler"],
@@ -425,6 +433,20 @@ const CONFIG = {
     result:    ['result','outcome','win/loss','w/l'],
     status:    ['submission status','status'],
     pickType:  ['is this your dotd or poty?','dotd or poty','dotd/poty','pick type']
+  },
+  // Season Long play: one NFL/CFB team win total or player season prop, over/under,
+  // per person for the whole year. Scoring is symmetric for now (win and loss both
+  // worth the same) since the exact loss rule hasn't been finalized — change
+  // SEASONLONG_LOSS_CREDIT below the moment that's decided.
+  SEASONLONG_CSV_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQCRC8yeTawObp3vTjHLXzExN2E-6NzA4G-3HJHJ_6bcQ4SA8SXtCwHAqfoAMjPFMBpTyilQQIBdQJU/pub?gid=154875397&single=true&output=csv",
+  SEASONLONG_WIN_CREDIT: 2,
+  SEASONLONG_LOSS_CREDIT: 2,
+  SEASONLONG_COLUMNS: {
+    timestamp: ['timestamp'],
+    name:      ['name','player','who','picked by'],
+    pick:      ['season long pick','season-long pick','pick','selection'],
+    result:    ['result','outcome','win/loss','w/l'],
+    status:    ['submission status','status']
   }
 };
 
@@ -546,6 +568,55 @@ function loadRecords(csvText){
   return records;
 }
 
+// Season Long picks: one per person for the whole year, no Week dimension.
+// The Sheet's Submission Status column is expected to already enforce both
+// "only your first submission counts" AND "not already claimed by someone
+// else" (same two-part rule used for weekly Pick Duplicate, just without a
+// per-week reset) — so anything that reaches here as Official is trusted
+// to be a single, valid, un-duplicated pick per person.
+function loadSeasonLongRecords(csvText){
+  const rows = parseCSV(csvText);
+  if(rows.length < 2) return [];
+  const headers = rows[0];
+  const idx = {
+    timestamp: matchColumn(headers, CONFIG.SEASONLONG_COLUMNS.timestamp),
+    name:      matchColumn(headers, CONFIG.SEASONLONG_COLUMNS.name),
+    pick:      matchColumn(headers, CONFIG.SEASONLONG_COLUMNS.pick),
+    result:    matchColumn(headers, CONFIG.SEASONLONG_COLUMNS.result),
+    status:    matchColumn(headers, CONFIG.SEASONLONG_COLUMNS.status),
+  };
+  const records = [];
+  for(let i=1;i<rows.length;i++){
+    const r = rows[i];
+    if(!r || r.every(c => !c || !c.trim())) continue;
+    const name = idx.name !== -1 ? (r[idx.name]||'').trim() : '';
+    if(!name) continue;
+    if(idx.status !== -1){
+      const statusVal = (r[idx.status] || '').trim().toLowerCase();
+      if(statusVal !== 'official') continue;
+    }
+    records.push({
+      timestamp: idx.timestamp !== -1 ? r[idx.timestamp] : '',
+      name,
+      pick: idx.pick !== -1 ? (r[idx.pick]||'').trim() : '',
+      result: normalizeResult(idx.result !== -1 ? r[idx.result] : '')
+    });
+  }
+  return records;
+}
+
+async function loadSeasonLongIfConfigured(){
+  if(!CONFIG.SEASONLONG_CSV_URL || CONFIG.SEASONLONG_CSV_URL.includes('PASTE_YOUR')) return [];
+  try{
+    const url = CONFIG.SEASONLONG_CSV_URL + (CONFIG.SEASONLONG_CSV_URL.includes('?') ? '&' : '?') + 'cachebust=' + Date.now();
+    const res = await fetch(url);
+    if(!res.ok) return [];
+    return loadSeasonLongRecords(await res.text());
+  } catch(e){
+    return []; // Season Long is additive — don't take down the rest of the site if this one source hiccups
+  }
+}
+
 // Same team+line picked by two different people in the same week isn't
 // allowed. `records` is already in the sheet's natural top-to-bottom order,
 // which is submission order — so the first time a (week, pick) combo is seen
@@ -577,18 +648,18 @@ function formatTimestamp(ts){
   return d.toLocaleString('en-US', {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
 }
 
-function computeStandings(records){
+function computeStandings(records, seasonLongRecords){
   const byName = {};
   const order = [];
   (CONFIG.ROSTER || []).forEach(n => {
-    if(!byName[n]){ byName[n] = {name:n, wins:0, losses:0, games:[], dotdCount:0, potyCount:0}; order.push(n); }
+    if(!byName[n]){ byName[n] = {name:n, wins:0, losses:0, games:[], dotdCount:0, potyCount:0, seasonLongPick:null, seasonLongResult:null}; order.push(n); }
   });
   records
     .slice()
     .sort((a,b) => (a.week||0) - (b.week||0))
     .forEach(rec => {
       if(!byName[rec.name]){
-        byName[rec.name] = {name:rec.name, wins:0, losses:0, games:[], dotdCount:0, potyCount:0};
+        byName[rec.name] = {name:rec.name, wins:0, losses:0, games:[], dotdCount:0, potyCount:0, seasonLongPick:null, seasonLongResult:null};
         order.push(rec.name);
       }
       const p = byName[rec.name];
@@ -606,6 +677,18 @@ function computeStandings(records){
       }
       if(rec.result === 'win' || rec.result === 'loss') p.games.push(rec.result);
     });
+  (seasonLongRecords || []).forEach(rec => {
+    if(!byName[rec.name]){
+      byName[rec.name] = {name:rec.name, wins:0, losses:0, games:[], dotdCount:0, potyCount:0, seasonLongPick:null, seasonLongResult:null};
+      order.push(rec.name);
+    }
+    const p = byName[rec.name];
+    p.seasonLongPick = rec.pick;
+    p.seasonLongResult = rec.result;
+    // Not pushed into p.games — a season-long play doesn't count toward the weekly streak.
+    if(rec.result === 'win') p.wins += CONFIG.SEASONLONG_WIN_CREDIT;
+    if(rec.result === 'loss') p.losses += CONFIG.SEASONLONG_LOSS_CREDIT;
+  });
   const standings = order.map(n => {
     const p = byName[n];
     const total = p.wins + p.losses;
@@ -650,6 +733,12 @@ function usageCell(kind, count){
   return `<span class="usage-pill ${kind} ${cls}">${icon} ${count}${over ? ' \u26A0' : ''}</span>`;
 }
 
+function seasonLongCell(p){
+  if(!p.seasonLongPick) return '<span class="prob-note">&mdash;</span>';
+  const cls = p.seasonLongResult === 'win' ? 'sl-win' : (p.seasonLongResult === 'loss' ? 'sl-loss' : 'sl-pending');
+  return `<span class="season-long-pick ${cls}" title="${p.seasonLongPick.replace(/"/g,'&quot;')}">${p.seasonLongPick}</span>`;
+}
+
 let ALL_RECORDS = [];
 let ALL_STANDINGS = [];
 
@@ -667,6 +756,7 @@ function renderStandings(){
       </td>
       <td>${usageCell('dotd', p.dotdCount)}</td>
       <td>${usageCell('poty', p.potyCount)}</td>
+      <td>${seasonLongCell(p)}</td>
     </tr>
   `).join('');
   body.querySelectorAll('tr.clickable').forEach(tr => {
@@ -762,6 +852,7 @@ function openPlayer(name){
   panel.innerHTML = `
     <span class="back-link" id="backToPlayers">&larr; all players</span>
     <h2>${name} ${p ? usageCell('dotd', p.dotdCount) + ' ' + usageCell('poty', p.potyCount) : ''} <span class="sm">${p ? p.wins+'-'+p.losses+' &middot; '+(p.total?(p.winPct*100).toFixed(0)+'% win rate':'no games yet') : ''}</span></h2>
+    ${p && p.seasonLongPick ? `<p class="prob-note" style="margin:-8px 0 14px;">&#127919; Season Long: ${seasonLongCell(p)}</p>` : ''}
     <table>
       <thead><tr><th>Week</th><th>Pick</th><th>Result</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="3" class="prob-note">No picks yet.</td></tr>'}</tbody>
@@ -812,7 +903,8 @@ async function init(){
     const text = await res.text();
     ALL_RECORDS = loadRecords(text);
     flagDuplicatePicks(ALL_RECORDS);
-    ALL_STANDINGS = computeStandings(ALL_RECORDS);
+    const seasonLongRecords = await loadSeasonLongIfConfigured();
+    ALL_STANDINGS = computeStandings(ALL_RECORDS, seasonLongRecords);
     document.getElementById('loading').style.display = 'none';
     document.getElementById('app').style.display = 'block';
     updateHeader();
