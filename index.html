@@ -40,6 +40,7 @@
     min-height:100vh;
     -webkit-font-smoothing:antialiased;
     overscroll-behavior-y:contain;
+    overflow-x:hidden;
     -webkit-tap-highlight-color:transparent;
   }
   /* soft gold glow, replaces the old chalk-dust texture */
@@ -96,7 +97,7 @@
   .pill b{color:var(--chalk-yellow); font-weight:600;}
 
   nav.tabs{
-    display:flex; gap:6px; margin:20px 0 18px; flex-wrap:wrap;
+    display:flex; gap:6px; margin:20px 0 18px; flex-wrap:wrap; justify-content:center;
   }
   nav.tabs button{
     font-family:var(--font-mono);
@@ -271,8 +272,20 @@
   .week-block table{table-layout:fixed;}
   .week-block th:nth-child(1), .week-block td:nth-child(1){width:26%;}
   .week-block th:nth-child(2), .week-block td:nth-child(2){width:48%;}
-  .week-block th:nth-child(3), .week-block td:nth-child(3){width:26%;}
+  .week-block th:nth-child(3), .week-block td:nth-child(3){width:26%; text-align:center;}
   .week-block td{overflow-wrap:break-word;}
+
+  /* Center-align short/badge-style columns; leave name & pick text left for readability */
+  .standings-table th:nth-child(1), .standings-table td:nth-child(1),
+  .standings-table th:nth-child(3), .standings-table td:nth-child(3),
+  .standings-table th:nth-child(4), .standings-table td:nth-child(4),
+  .standings-table th:nth-child(5), .standings-table td:nth-child(5),
+  .standings-table th:nth-child(6), .standings-table td:nth-child(6),
+  .standings-table th:nth-child(7), .standings-table td:nth-child(7){text-align:center;}
+
+  .thisweek-table th:nth-child(3), .thisweek-table td:nth-child(3){text-align:center;}
+  .player-table th:nth-child(1), .player-table td:nth-child(1),
+  .player-table th:nth-child(3), .player-table td:nth-child(3){text-align:center;}
 
   .player-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:12px;}
   .player-card{
@@ -357,7 +370,7 @@
         <h2>Season Standings <span class="sm">ranked by win %, then wins</span></h2>
         <div class="table-scroll-wrap">
         <div class="table-scroll">
-        <table>
+        <table class="standings-table">
           <thead>
             <tr><th></th><th>Player</th><th>Record</th><th>Win%</th><th>Streak</th><th>DOTD</th><th>POTY</th><th>&#127919; Season Long</th></tr>
           </thead>
@@ -371,7 +384,7 @@
     <section class="view active" id="view-thisweek">
       <div class="panel">
         <h2>This Week's Picks <span class="sm" id="thisWeekSub"></span></h2>
-        <table>
+        <table class="thisweek-table">
           <thead>
             <tr><th>Player</th><th>Pick</th><th>Result</th></tr>
           </thead>
@@ -868,7 +881,7 @@ function openPlayer(name){
     <span class="back-link" id="backToPlayers">&larr; all players</span>
     <h2>${name} ${p ? usageCell('dotd', p.dotdCount) + ' ' + usageCell('poty', p.potyCount) : ''} <span class="sm">${p ? p.wins+'-'+p.losses+' &middot; '+(p.total?(p.winPct*100).toFixed(0)+'% win rate':'no games yet') : ''}</span></h2>
     ${p && p.seasonLongPick ? `<p class="prob-note" style="margin:-8px 0 14px;">&#127919; Season Long: ${seasonLongCell(p)}</p>` : ''}
-    <table>
+    <table class="player-table">
       <thead><tr><th>Week</th><th>Pick</th><th>Result</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="3" class="prob-note">No picks yet.</td></tr>'}</tbody>
     </table>
