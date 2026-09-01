@@ -154,10 +154,24 @@
   }
 
   .header-submit{text-align:center; margin-top:20px; padding-top:18px; border-top:1px solid var(--line);}
-  .submit-rules{
-    list-style:none; padding:0; margin:0 auto 24px;
-    max-width:420px; text-align:left;
+  .rules-box{
+    max-width:420px; margin:0 auto 24px;
+    border:1px solid var(--line); border-radius:8px;
+    background:rgba(255,255,255,0.02);
+    padding:14px 16px;
   }
+  .rules-title{
+    margin:0 0 10px; text-align:center;
+    font-family:var(--font-display); font-size:1.15rem; letter-spacing:1.5px;
+    color:var(--gold-bright); text-transform:uppercase;
+  }
+  .submit-rules{
+    list-style:none; margin:0; padding:0;
+    text-align:left;
+    max-height:180px; overflow-y:auto;
+  }
+  .submit-rules::-webkit-scrollbar{width:6px;}
+  .submit-rules::-webkit-scrollbar-thumb{background:var(--line-strong); border-radius:3px;}
   .submit-rules li{
     position:relative; padding-left:22px; margin-bottom:11px;
     color:var(--chalk-white); font-size:0.95rem; font-weight:600; line-height:1.55;
@@ -352,18 +366,21 @@
       <span class="pill">Week <b id="curWeekLabel">&mdash;</b> / <b id="totalWeeksLabel">&mdash;</b></span>
     </div>
     <div class="header-submit">
-      <ul class="submit-rules">
-        <li>$100 buy-in per person</li>
-        <li>Bets must come from FanDuel, DraftKings, or Oddshark</li>
-        <li>Submit your pick Tuesday through Monday &mdash; no submission means an automatic loss for the week</li>
-        <li>Can't take the same line as someone else &mdash; first come, first served. Check This Week's Picks to see what's already taken</li>
-        <li>Odds must be &minus;120 or higher</li>
-        <li>Player props are eligible</li>
-        <li>One POTY, required at some point this season &mdash; win = 2 wins, loss = 2 losses</li>
-        <li>One DOTD, optional &mdash; a +200-or-longer underdog; win = 2 wins, loss = 1 loss</li>
-        <li>Season Long pick required, &minus;140 or higher &mdash; counts as a win once it's settled. Use the Submit Season Long Pick button below</li>
-        <li>Ties are settled in the playoffs</li>
-      </ul>
+      <div class="rules-box">
+        <h3 class="rules-title">Rules</h3>
+        <ul class="submit-rules">
+          <li>$100 buy-in per person</li>
+          <li>Bets must come from FanDuel, DraftKings, or Oddshark</li>
+          <li>Submit your pick Tuesday through Monday &mdash; no submission means an automatic loss for the week</li>
+          <li>Can't take the same line as someone else &mdash; first come, first served. Check This Week's Picks to see what's already taken</li>
+          <li>Odds must be &minus;120 or higher</li>
+          <li>Player props are eligible</li>
+          <li>One POTY, required at some point this season &mdash; win = 2 wins, loss = 2 losses</li>
+          <li>One DOTD, optional &mdash; a +200-or-longer underdog; win = 2 wins, loss = 1 loss</li>
+          <li>Season Long pick required, &minus;140 or higher &mdash; counts as a win once it's settled. Use the Submit Season Long Pick button below</li>
+          <li>Ties are settled in the playoffs</li>
+        </ul>
+      </div>
       <a class="submit-btn" href="https://forms.gle/oTVjsyrjn7J2AUhs8" target="_blank" rel="noopener">Submit This Week's Pick &rarr;</a>
       <div>
         <a class="submit-btn secondary" href="https://docs.google.com/forms/d/e/1FAIpQLSdXQrAtChJJVxSC2haYqVjsPKmSdpuJxPY1gmIa9_axbJM_IA/viewform?usp=dialog" target="_blank" rel="noopener">&#127919; Submit Season Long Pick</a>
