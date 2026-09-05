@@ -868,10 +868,10 @@ function setupTableScrollFade(){
 // this fails silently for that pick — nothing else on the page depends on
 // it, so a lookup failure never breaks This Week's Picks itself.
 const GAMETIME_SPORTS = {
-  "nfl":                     {path:"football/nfl", params:{limit:"100"}},
   "college-football":        {path:"football/college-football", params:{groups:"80", limit:"500"}},
-  "mlb":                     {path:"baseball/mlb", params:{limit:"200"}},
-  "mens-college-basketball": {path:"basketball/mens-college-basketball", params:{groups:"50", limit:"500"}}
+  "nfl":                     {path:"football/nfl", params:{limit:"100"}},
+  "mens-college-basketball": {path:"basketball/mens-college-basketball", params:{groups:"50", limit:"500"}},
+  "mlb":                     {path:"baseball/mlb", params:{limit:"200"}}
 };
 const ESPN_SCOREBOARD_BASE = "https://site.api.espn.com/apis/site/v2/sports/{path}/scoreboard";
 const gameTimeCache = {};
