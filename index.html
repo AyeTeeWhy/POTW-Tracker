@@ -257,6 +257,7 @@
   tr.pick-invalid td{background:rgba(184,92,74,0.09);}
   .pick-invalid-note{display:block; font-size:0.7rem; color:var(--chalk-red); margin-top:3px;}
   .pick-time{display:block; font-size:0.68rem; color:var(--chalk-dim); margin-top:2px; font-weight:400;}
+  .game-time{display:block; font-size:0.7rem; color:var(--chalk-dim); margin-top:3px; font-weight:400;}
 
   .table-scroll-wrap{position:relative;}
   .table-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch;}
@@ -858,6 +859,119 @@ function setupTableScrollFade(){
   }
 }
 
+// ============ LIVE GAME TIME LOOKUP (ESPN, best-effort) ============
+// Runs straight from the visitor's browser in real time — no backend, no
+// sheet changes. For each pick, pulls the team name out of the pick text,
+// searches ESPN's public scoreboards for the current pool week, and shows
+// the game's kickoff time in Eastern. If ESPN's endpoint is unreachable, or
+// blocks requests from this page's origin, or the team can't be matched,
+// this fails silently for that pick — nothing else on the page depends on
+// it, so a lookup failure never breaks This Week's Picks itself.
+const GAMETIME_SPORTS = {
+  "nfl":                     {path:"football/nfl", params:{}},
+  "college-football":        {path:"football/college-football", params:{groups:"80", limit:"500"}},
+  "mlb":                     {path:"baseball/mlb", params:{}},
+  "mens-college-basketball": {path:"basketball/mens-college-basketball", params:{groups:"50", limit:"500"}}
+};
+const ESPN_SCOREBOARD_BASE = "https://site.api.espn.com/apis/site/v2/sports/{path}/scoreboard";
+const gameTimeCache = {};
+
+// 'Kyler Murray TD Over' has no team; '-10 LSU' and 'LSU -10' both do —
+// handle the marker (spread/ML) landing on either side of the team name.
+function parsePickTeam(pickText){
+  if(!pickText) return null;
+  const text = pickText.trim();
+  let m = text.match(/^(ML|[+-]\d+(?:\.\d+)?)\s+(.+)$/i);
+  if(m) return m[2].trim();
+  m = text.match(/^(.+?)\s+(ML|[+-]\d+(?:\.\d+)?)$/i);
+  if(m) return m[1].trim();
+  return null;
+}
+
+function espnTeamMatches(teamText, teamObj){
+  const needle = teamText.trim().toLowerCase();
+  const candidates = [teamObj.name, teamObj.shortDisplayName, teamObj.location, teamObj.displayName, teamObj.abbreviation]
+    .filter(Boolean).map(s => s.toLowerCase());
+  return candidates.some(c => needle === c || needle.includes(c) || c.includes(needle));
+}
+
+function ymd(date){
+  return date.getFullYear() + String(date.getMonth()+1).padStart(2,'0') + String(date.getDate()).padStart(2,'0');
+}
+
+// The 7 calendar dates (Tue-Mon) of the currently active pool week. Falls
+// back to a window around today if the season isn't configured/active yet,
+// so the lookup still does something useful during testing.
+function currentWeekDates(){
+  const info = computeCurrentWeek();
+  if(CONFIG.SEASON_START_DATE && info && info.status === 'active'){
+    const [sy,sm,sd] = CONFIG.SEASON_START_DATE.split('-').map(Number);
+    const startMs = Date.UTC(sy, sm-1, sd) + (info.week-1)*7*86400000;
+    const dates = [];
+    for(let i=0;i<7;i++) dates.push(new Date(startMs + i*86400000));
+    return dates;
+  }
+  const dates = [];
+  const today = new Date();
+  for(let offset=-1; offset<=7; offset++){
+    const d = new Date(today);
+    d.setUTCDate(d.getUTCDate()+offset);
+    dates.push(d);
+  }
+  return dates;
+}
+
+async function fetchScoreboard(sportKey, dateStr){
+  const cacheKey = sportKey + '|' + dateStr;
+  if(gameTimeCache[cacheKey] !== undefined) return gameTimeCache[cacheKey];
+  const spec = GAMETIME_SPORTS[sportKey];
+  const url = new URL(ESPN_SCOREBOARD_BASE.replace('{path}', spec.path));
+  url.searchParams.set('dates', dateStr);
+  Object.entries(spec.params).forEach(([k,v]) => url.searchParams.set(k, v));
+  try{
+    const res = await fetch(url.toString());
+    if(!res.ok) throw new Error('bad status ' + res.status);
+    const data = await res.json();
+    const events = data.events || [];
+    gameTimeCache[cacheKey] = events;
+    return events;
+  } catch(e){
+    gameTimeCache[cacheKey] = null; // remembered as "don't retry this one" for the rest of this page view
+    return null;
+  }
+}
+
+function formatGameTimeET(isoString){
+  const d = new Date(isoString);
+  if(isNaN(d.getTime())) return null;
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone:'America/New_York', weekday:'short', hour:'numeric', minute:'2-digit'
+  });
+  return fmt.format(d) + ' ET';
+}
+
+async function findGameTime(pickText){
+  const teamText = parsePickTeam(pickText);
+  if(!teamText) return null;
+  const dates = currentWeekDates();
+  for(const date of dates){
+    const dateStr = ymd(date);
+    for(const sportKey of Object.keys(GAMETIME_SPORTS)){
+      const events = await fetchScoreboard(sportKey, dateStr);
+      if(!events) continue;
+      for(const event of events){
+        const competition = event.competitions && event.competitions[0];
+        if(!competition) continue;
+        const competitors = competition.competitors || [];
+        if(competitors.some(c => c.team && espnTeamMatches(teamText, c.team))){
+          return event.date || null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
 function renderThisWeek(){
   const body = document.getElementById('thisWeekBody');
   const sub = document.getElementById('thisWeekSub');
@@ -880,13 +994,27 @@ function renderThisWeek(){
     body.innerHTML = `<tr><td colspan="3" class="prob-note">No picks logged for this week yet.</td></tr>`;
     return;
   }
-  body.innerHTML = picks.map(r => {
+  body.innerHTML = picks.map((r, i) => {
     return `<tr class="${r.pickInvalid ? 'pick-invalid' : ''}">
       <td class="name">${r.name}<span class="pick-time">${formatTimestamp(r.timestamp)}</span></td>
-      <td>${r.pick || '&mdash;'}${pickTag(r.pickType, r.pickType==='dotd'?r.dotdSeq:r.potySeq)}${r.pickInvalid ? `<span class="pick-tag invalid">NOT VALID</span><span class="pick-invalid-note">&#9888; already taken this week by ${r.pickInvalidBy}</span>` : ''}</td>
+      <td>${r.pick || '&mdash;'}${pickTag(r.pickType, r.pickType==='dotd'?r.dotdSeq:r.potySeq)}${r.pickInvalid ? `<span class="pick-tag invalid">NOT VALID</span><span class="pick-invalid-note">&#9888; already taken this week by ${r.pickInvalidBy}</span>` : `<span class="game-time" id="gt-${i}"></span>`}</td>
       <td>${resultBadge(r.result)}</td>
     </tr>`;
   }).join('');
+
+  // Live kickoff-time lookups, one per pick, non-blocking. Each fills in its
+  // own span whenever (and if) it resolves — a slow or failed lookup for one
+  // pick never holds up the rest of the table, which is already rendered.
+  picks.forEach((r, i) => {
+    if(r.pickInvalid || !r.pick) return;
+    findGameTime(r.pick).then(iso => {
+      if(!iso) return;
+      const et = formatGameTimeET(iso);
+      if(!et) return;
+      const el = document.getElementById('gt-'+i);
+      if(el) el.textContent = et;
+    }).catch(() => {});
+  });
 }
 
 function renderHistory(){
