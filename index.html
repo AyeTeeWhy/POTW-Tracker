@@ -861,42 +861,69 @@ function setupTableScrollFade(){
 
 // ============ LIVE GAME TIME LOOKUP (ESPN, best-effort) ============
 // Runs straight from the visitor's browser in real time — no backend, no
-// sheet changes. For each pick, pulls the team name out of the pick text,
+// sheet changes. For each pick, pulls the team name(s) out of the pick text,
 // searches ESPN's public scoreboards for the current pool week, and shows
 // the game's kickoff time in Eastern. If ESPN's endpoint is unreachable, or
 // blocks requests from this page's origin, or the team can't be matched,
 // this fails silently for that pick — nothing else on the page depends on
 // it, so a lookup failure never breaks This Week's Picks itself.
 const GAMETIME_SPORTS = {
-  "nfl":                     {path:"football/nfl", params:{}},
+  "nfl":                     {path:"football/nfl", params:{limit:"100"}},
   "college-football":        {path:"football/college-football", params:{groups:"80", limit:"500"}},
-  "mlb":                     {path:"baseball/mlb", params:{}},
+  "mlb":                     {path:"baseball/mlb", params:{limit:"200"}},
   "mens-college-basketball": {path:"basketball/mens-college-basketball", params:{groups:"50", limit:"500"}}
 };
 const ESPN_SCOREBOARD_BASE = "https://site.api.espn.com/apis/site/v2/sports/{path}/scoreboard";
 const gameTimeCache = {};
 
-// 'Kyler Murray TD Over' has no team; '-10 LSU' and 'LSU -10' both do —
-// handle the marker (spread/ML) landing on either side of the team name.
-function parsePickTeam(pickText){
-  if(!pickText) return null;
+// Pulls one or more team-name candidates out of a pick's free text. Handles:
+//   'LSU -10' / '-10 LSU'            -> ['LSU']
+//   'Chiefs ML'                       -> ['Chiefs']
+//   'Florida Atlantic at Florida - Under 59.5'  -> ['Florida Atlantic','Florida']
+//   'IU vs UNT over 56.5'             -> ['IU','UNT']
+//   'Kyler Murray TD Over'            -> [] (no team to search — a player prop)
+function parsePickTeams(pickText){
+  if(!pickText) return [];
   const text = pickText.trim();
+
+  const matchup = text.match(/^(.+?)\s+(?:at|vs\.?|@)\s+(.+)$/i);
+  if(matchup){
+    const team2 = matchup[2].replace(/[-\u2013]?\s*(over|under)\b.*$/i, '').trim();
+    return [matchup[1].trim(), team2].filter(Boolean);
+  }
+
   let m = text.match(/^(ML|[+-]\d+(?:\.\d+)?)\s+(.+)$/i);
-  if(m) return m[2].trim();
+  if(m) return [m[2].trim()];
+
   m = text.match(/^(.+?)\s+(ML|[+-]\d+(?:\.\d+)?)$/i);
-  if(m) return m[1].trim();
-  return null;
+  if(m) return [m[1].trim()];
+
+  return [];
 }
 
+// Exact match on the (short, collision-prone) abbreviation field only;
+// name/location/displayName allow a substring match, but only once both
+// sides are long enough that a coincidental partial match is unlikely.
 function espnTeamMatches(teamText, teamObj){
   const needle = teamText.trim().toLowerCase();
-  const candidates = [teamObj.name, teamObj.shortDisplayName, teamObj.location, teamObj.displayName, teamObj.abbreviation]
+  if(needle.length < 3) return false;
+  const abbr = (teamObj.abbreviation || '').toLowerCase();
+  if(abbr && needle === abbr) return true;
+  const looseFields = [teamObj.name, teamObj.shortDisplayName, teamObj.location, teamObj.displayName]
     .filter(Boolean).map(s => s.toLowerCase());
-  return candidates.some(c => needle === c || needle.includes(c) || c.includes(needle));
+  return looseFields.some(c =>
+    needle === c ||
+    (needle.length >= 4 && c.includes(needle)) ||
+    (c.length >= 4 && needle.includes(c))
+  );
 }
 
+// Y/M/D read back using UTC getters — must match how the date was built
+// (Date.UTC / setUTCDate below), or a visitor's local time zone silently
+// shifts every search date by up to a day and the lookup finds the wrong
+// (or no) game.
 function ymd(date){
-  return date.getFullYear() + String(date.getMonth()+1).padStart(2,'0') + String(date.getDate()).padStart(2,'0');
+  return date.getUTCFullYear() + String(date.getUTCMonth()+1).padStart(2,'0') + String(date.getUTCDate()).padStart(2,'0');
 }
 
 // The 7 calendar dates (Tue-Mon) of the currently active pool week. Falls
@@ -921,12 +948,21 @@ function currentWeekDates(){
   return dates;
 }
 
-async function fetchScoreboard(sportKey, dateStr){
-  const cacheKey = sportKey + '|' + dateStr;
+// One request per sport for the whole week's date RANGE (ESPN accepts
+// "YYYYMMDD-YYYYMMDD"), instead of iterating single days — fewer requests,
+// and side-steps any per-day boundary edge cases entirely since ESPN
+// resolves the whole window server-side.
+function weekRangeParam(){
+  const dates = currentWeekDates();
+  return ymd(dates[0]) + '-' + ymd(dates[dates.length-1]);
+}
+
+async function fetchScoreboard(sportKey, rangeStr){
+  const cacheKey = sportKey + '|' + rangeStr;
   if(gameTimeCache[cacheKey] !== undefined) return gameTimeCache[cacheKey];
   const spec = GAMETIME_SPORTS[sportKey];
   const url = new URL(ESPN_SCOREBOARD_BASE.replace('{path}', spec.path));
-  url.searchParams.set('dates', dateStr);
+  url.searchParams.set('dates', rangeStr);
   Object.entries(spec.params).forEach(([k,v]) => url.searchParams.set(k, v));
   try{
     const res = await fetch(url.toString());
@@ -951,21 +987,18 @@ function formatGameTimeET(isoString){
 }
 
 async function findGameTime(pickText){
-  const teamText = parsePickTeam(pickText);
-  if(!teamText) return null;
-  const dates = currentWeekDates();
-  for(const date of dates){
-    const dateStr = ymd(date);
-    for(const sportKey of Object.keys(GAMETIME_SPORTS)){
-      const events = await fetchScoreboard(sportKey, dateStr);
-      if(!events) continue;
-      for(const event of events){
-        const competition = event.competitions && event.competitions[0];
-        if(!competition) continue;
-        const competitors = competition.competitors || [];
-        if(competitors.some(c => c.team && espnTeamMatches(teamText, c.team))){
-          return event.date || null;
-        }
+  const candidates = parsePickTeams(pickText);
+  if(!candidates.length) return null;
+  const rangeStr = weekRangeParam();
+  for(const sportKey of Object.keys(GAMETIME_SPORTS)){
+    const events = await fetchScoreboard(sportKey, rangeStr);
+    if(!events) continue;
+    for(const event of events){
+      const competition = event.competitions && event.competitions[0];
+      if(!competition) continue;
+      const competitors = competition.competitors || [];
+      if(competitors.some(c => c.team && candidates.some(t => espnTeamMatches(t, c.team)))){
+        return event.date || null;
       }
     }
   }
