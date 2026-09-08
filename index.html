@@ -777,7 +777,7 @@ function computeStandings(records, seasonLongRecords){
     }
     return {...p, total, winPct, streak, streakType};
   });
-  standings.sort((a,b) => b.winPct - a.winPct || b.wins - a.wins);
+  standings.sort((a,b) => b.winPct - a.winPct || b.wins - a.wins || a.losses - b.losses);
   return standings;
 }
 
