@@ -239,6 +239,7 @@
   }
   .badge.win{color:var(--chalk-green); border-color:rgba(143,191,159,0.4);}
   .badge.loss{color:var(--chalk-red); border-color:rgba(217,135,135,0.4);}
+  .badge.push{color:var(--chalk-dim); border-color:var(--line-strong);}
   .badge.pending{color:var(--chalk-dim);}
   .badge.chalk{color:var(--chalk-blue); border-color:rgba(143,180,201,0.4);}
   .badge.heavychalk{color:var(--chalk-yellow); border-color:rgba(232,199,107,0.4);}
@@ -598,7 +599,7 @@ function normalizeResult(raw){
   if(!r) return 'pending';
   if(r.startsWith('w')) return 'win';
   if(r.startsWith('l')) return 'loss';
-  if(r.startsWith('p') && r !== 'pending') return 'push';
+  if(r.startsWith('no result') || (r.startsWith('p') && r !== 'pending')) return 'push';
   return 'pending';
 }
 
@@ -725,14 +726,14 @@ function computeStandings(records, seasonLongRecords){
   const byName = {};
   const order = [];
   (CONFIG.ROSTER || []).forEach(n => {
-    if(!byName[n]){ byName[n] = {name:n, wins:0, losses:0, games:[], dotdCount:0, potyCount:0, seasonLongPick:null, seasonLongResult:null}; order.push(n); }
+    if(!byName[n]){ byName[n] = {name:n, wins:0, losses:0, pushes:0, games:[], dotdCount:0, potyCount:0, seasonLongPick:null, seasonLongResult:null}; order.push(n); }
   });
   records
     .slice()
     .sort((a,b) => (a.week||0) - (b.week||0))
     .forEach(rec => {
       if(!byName[rec.name]){
-        byName[rec.name] = {name:rec.name, wins:0, losses:0, games:[], dotdCount:0, potyCount:0, seasonLongPick:null, seasonLongResult:null};
+        byName[rec.name] = {name:rec.name, wins:0, losses:0, pushes:0, games:[], dotdCount:0, potyCount:0, seasonLongPick:null, seasonLongResult:null};
         order.push(rec.name);
       }
       const p = byName[rec.name];
@@ -748,11 +749,12 @@ function computeStandings(records, seasonLongRecords){
         else if(rec.pickType === 'poty') p.losses += CONFIG.POTY_LOSS_CREDIT;
         else p.losses += 1;
       }
+      if(rec.result === 'push') p.pushes += 1;
       if(rec.result === 'win' || rec.result === 'loss') p.games.push(rec.result);
     });
   (seasonLongRecords || []).forEach(rec => {
     if(!byName[rec.name]){
-      byName[rec.name] = {name:rec.name, wins:0, losses:0, games:[], dotdCount:0, potyCount:0, seasonLongPick:null, seasonLongResult:null};
+      byName[rec.name] = {name:rec.name, wins:0, losses:0, pushes:0, games:[], dotdCount:0, potyCount:0, seasonLongPick:null, seasonLongResult:null};
       order.push(rec.name);
     }
     const p = byName[rec.name];
@@ -761,6 +763,7 @@ function computeStandings(records, seasonLongRecords){
     // Not pushed into p.games — a season-long play doesn't count toward the weekly streak.
     if(rec.result === 'win') p.wins += CONFIG.SEASONLONG_WIN_CREDIT;
     if(rec.result === 'loss') p.losses += CONFIG.SEASONLONG_LOSS_CREDIT;
+    if(rec.result === 'push') p.pushes += 1;
   });
   const standings = order.map(n => {
     const p = byName[n];
@@ -781,7 +784,7 @@ function computeStandings(records, seasonLongRecords){
 function resultBadge(result){
   if(result === 'win') return '<span class="badge win">Win</span>';
   if(result === 'loss') return '<span class="badge loss">Loss</span>';
-  if(result === 'push') return '<span class="badge pending">Push</span>';
+  if(result === 'push') return '<span class="badge push">Push</span>';
   return '<span class="badge pending">Pending</span>';
 }
 
@@ -822,7 +825,7 @@ function renderStandings(){
     <tr class="clickable" data-player="${encodeURIComponent(p.name)}">
       <td class="rank">${i<3 && p.total>0 ? `<span class="medal ${medalClass[i]}">${i+1}</span>` : (i+1)}</td>
       <td class="name">${p.name}</td>
-      <td>${p.wins}-${p.losses}</td>
+      <td>${p.wins}-${p.losses}${p.pushes > 0 ? '-'+p.pushes : ''}</td>
       <td class="winpct">${p.total ? (p.winPct*100).toFixed(0)+'%' : '&mdash;'}</td>
       <td class="${p.streak>=2 && p.streakType==='win' ? 'streak-hot' : (p.streak>=2 && p.streakType==='loss' ? 'streak-cold':'')}">
         ${p.streak ? p.streak + (p.streakType==='win' ? 'W':'L') : '&mdash;'}
@@ -921,7 +924,7 @@ function renderPlayers(){
     <div class="player-card" data-player="${encodeURIComponent(p.name)}">
       <div class="pname">${p.name}</div>
       <div class="prow">
-        <span class="prob-note">${p.wins}-${p.losses}</span>
+        <span class="prob-note">${p.wins}-${p.losses}${p.pushes > 0 ? '-'+p.pushes : ''}</span>
         <span class="winpct">${p.total ? (p.winPct*100).toFixed(0)+'%':'&mdash;'}</span>
       </div>
     </div>
@@ -945,7 +948,7 @@ function openPlayer(name){
   }).join('');
   panel.innerHTML = `
     <span class="back-link" id="backToPlayers">&larr; all players</span>
-    <h2>${name} ${p ? usageCell('dotd', p.dotdCount) + ' ' + usageCell('poty', p.potyCount) : ''} <span class="sm">${p ? p.wins+'-'+p.losses+' &middot; '+(p.total?(p.winPct*100).toFixed(0)+'% win rate':'no games yet') : ''}</span></h2>
+    <h2>${name} ${p ? usageCell('dotd', p.dotdCount) + ' ' + usageCell('poty', p.potyCount) : ''} <span class="sm">${p ? p.wins+'-'+p.losses+(p.pushes>0?'-'+p.pushes:'')+' &middot; '+(p.total?(p.winPct*100).toFixed(0)+'% win rate':'no games yet') : ''}</span></h2>
     ${p && p.seasonLongPick ? `<p class="prob-note" style="margin:-8px 0 14px;">&#127919; Season Long: ${seasonLongCell(p)}</p>` : ''}
     <table class="player-table">
       <thead><tr><th>Week</th><th>Pick</th><th>Result</th></tr></thead>
