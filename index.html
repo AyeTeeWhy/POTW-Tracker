@@ -240,6 +240,8 @@
   .badge.win{color:var(--chalk-green); border-color:rgba(143,191,159,0.4);}
   .badge.loss{color:var(--chalk-red); border-color:rgba(217,135,135,0.4);}
   .badge.push{color:var(--chalk-dim); border-color:var(--line-strong);}
+  .units-positive{color:var(--chalk-green); font-weight:700;}
+  .units-negative{color:var(--chalk-red); font-weight:700;}
   .badge.pending{color:var(--chalk-dim);}
   .badge.chalk{color:var(--chalk-blue); border-color:rgba(143,180,201,0.4);}
   .badge.heavychalk{color:var(--chalk-yellow); border-color:rgba(232,199,107,0.4);}
@@ -409,6 +411,7 @@
       <button data-view="standings">Standings</button>
       <button data-view="history">History</button>
       <button data-view="players">Players</button>
+      <button data-view="units">Units</button>
     </nav>
 
     <section class="view" id="view-standings">
@@ -450,6 +453,18 @@
       <div class="panel" id="playersPanel">
         <h2>Players</h2>
         <div class="player-grid" id="playersGrid"></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-units">
+      <div class="panel">
+        <h2>Season Units <span class="sm">$10/unit &middot; &minus;120 default, DOTD +200</span></h2>
+        <table>
+          <thead>
+            <tr><th></th><th>Player</th><th>Net</th></tr>
+          </thead>
+          <tbody id="unitsBody"></tbody>
+        </table>
       </div>
     </section>
   </div>
@@ -521,7 +536,16 @@ const CONFIG = {
     pick:      ['season long pick','season-long pick','pick','selection'],
     result:    ['result','outcome','win/loss','w/l'],
     status:    ['submission status','status']
-  }
+  },
+  // Units tracker: every weekly pick (normal + POTY) is simulated as a flat
+  // $10 bet at -120 odds; a DOTD pick is simulated at +200 instead, since
+  // it's the one category that's actually an underdog by rule. This is a
+  // separate, purely financial "what would this have won/lost" view — it
+  // does not use the win/loss CREDIT numbers above (those are for pool
+  // standings, not real money). Season Long isn't included in this tracker.
+  UNIT_SIZE: 10,
+  UNIT_DEFAULT_ODDS: -120,
+  UNIT_DOTD_ODDS: 200
 };
 
 function normalizePickType(raw){
@@ -781,6 +805,30 @@ function computeStandings(records, seasonLongRecords){
   return standings;
 }
 
+// Simulated $10-unit profit/loss per person — normal & POTY picks at -120,
+// DOTD picks at +200. Purely a "what would this have won/lost in real
+// money" view, separate from the pool's win/loss scoring above. Pending
+// picks don't count yet; a push returns the stake (no gain, no loss).
+function unitProfitForOdds(odds, unit){
+  return odds < 0 ? unit * (100/Math.abs(odds)) : unit * (odds/100);
+}
+
+function computeUnits(records){
+  const byName = {};
+  (CONFIG.ROSTER || []).forEach(n => { byName[n] = {name:n, net:0, wins:0, losses:0, pushes:0}; });
+  (records || []).forEach(rec => {
+    if(!byName[rec.name]) byName[rec.name] = {name:rec.name, net:0, wins:0, losses:0, pushes:0};
+    const p = byName[rec.name];
+    const odds = rec.pickType === 'dotd' ? CONFIG.UNIT_DOTD_ODDS : CONFIG.UNIT_DEFAULT_ODDS;
+    if(rec.result === 'win'){ p.net += unitProfitForOdds(odds, CONFIG.UNIT_SIZE); p.wins++; }
+    else if(rec.result === 'loss'){ p.net -= CONFIG.UNIT_SIZE; p.losses++; }
+    else if(rec.result === 'push'){ p.pushes++; }
+  });
+  const list = Object.values(byName);
+  list.sort((a,b) => b.net - a.net);
+  return list;
+}
+
 function resultBadge(result){
   if(result === 'win') return '<span class="badge win">Win</span>';
   if(result === 'loss') return '<span class="badge loss">Loss</span>';
@@ -817,6 +865,7 @@ function seasonLongCell(p){
 
 let ALL_RECORDS = [];
 let ALL_STANDINGS = [];
+let ALL_UNITS = [];
 
 function renderStandings(){
   const body = document.getElementById('standingsBody');
@@ -934,6 +983,22 @@ function renderPlayers(){
   });
 }
 
+function renderUnits(){
+  const body = document.getElementById('unitsBody');
+  if(!body) return;
+  body.innerHTML = ALL_UNITS.map((p, i) => {
+    const positive = p.net > 0.004; // avoid "-$0.00" from float rounding right at zero
+    const negative = p.net < -0.004;
+    const cls = positive ? 'units-positive' : (negative ? 'units-negative' : '');
+    const sign = negative ? '-' : (positive ? '+' : '');
+    return `<tr>
+      <td class="rank">${i+1}</td>
+      <td class="name">${p.name}</td>
+      <td class="${cls}">${sign}$${Math.abs(p.net).toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+}
+
 function openPlayer(name){
   setActiveView('players');
   const p = ALL_STANDINGS.find(s => s.name === name);
@@ -1002,6 +1067,7 @@ async function init(){
     flagDuplicatePicks(ALL_RECORDS);
     const seasonLongRecords = await loadSeasonLongIfConfigured();
     ALL_STANDINGS = computeStandings(ALL_RECORDS, seasonLongRecords);
+    ALL_UNITS = computeUnits(ALL_RECORDS);
     document.getElementById('loading').style.display = 'none';
     document.getElementById('app').style.display = 'block';
     updateHeader();
@@ -1009,6 +1075,7 @@ async function init(){
     renderThisWeek();
     renderHistory();
     renderPlayers();
+    renderUnits();
   } catch(err){
     showError(String(err));
   }
