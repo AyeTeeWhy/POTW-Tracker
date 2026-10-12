@@ -181,6 +181,25 @@
     content:"\2022"; position:absolute; left:2px; top:0;
     color:var(--chalk-yellow); font-weight:700; font-size:1.05em;
   }
+  .week-banner{
+    margin:0 auto 20px; padding:14px 12px 12px; max-width:420px;
+    border:1px solid var(--line-strong); border-radius:10px;
+    background:linear-gradient(180deg, rgba(168,58,50,0.14), rgba(168,58,50,0.04));
+    text-align:center;
+  }
+  .week-banner-main{
+    display:flex; align-items:baseline; justify-content:center; gap:14px;
+    font-family:var(--font-display); line-height:1; text-transform:uppercase;
+  }
+  .week-banner-word{font-size:2.2rem; letter-spacing:3px; color:var(--chalk-white); -webkit-text-stroke:1px var(--chalk-white);}
+  .week-banner-num{
+    font-size:4.6rem; letter-spacing:1px; color:var(--gold-bright); -webkit-text-stroke:2px var(--gold-bright);
+    text-shadow:0 0 22px rgba(168,58,50,0.45);
+  }
+  .week-banner-sub{
+    margin-top:6px; font-size:0.95rem; font-weight:700; letter-spacing:2px;
+    text-transform:uppercase; color:var(--chalk-dim);
+  }
   .submit-btn{
     display:inline-block;
     background:linear-gradient(145deg,#5A7C99,#3E5C74);
@@ -230,8 +249,8 @@
   .rank .medal.bronze{background:linear-gradient(145deg,#D9A876,var(--bronze));}
   .name{font-weight:600; color:var(--chalk-white);}
   .winpct{font-weight:600;}
-  .streak-hot{color:var(--chalk-yellow);}
-  .streak-cold{color:var(--chalk-red);}
+  .streak-win{color:var(--chalk-green); font-weight:700;}
+  .streak-loss{color:var(--chalk-red); font-weight:700;}
 
   .badge{
     display:inline-block; padding:2px 8px; border-radius:6px; font-size:0.68rem;
@@ -325,7 +344,10 @@
   .standings-table th:nth-child(4), .standings-table td:nth-child(4),
   .standings-table th:nth-child(5), .standings-table td:nth-child(5),
   .standings-table th:nth-child(6), .standings-table td:nth-child(6),
-  .standings-table th:nth-child(7), .standings-table td:nth-child(7){text-align:center;}
+  .standings-table th:nth-child(7), .standings-table td:nth-child(7),
+  .standings-table th:nth-child(8), .standings-table td:nth-child(8){text-align:center;}
+  .title-odds{font-weight:700; color:var(--chalk-white);}
+  .odds-note{margin:12px 2px 10px; font-size:0.72rem; line-height:1.5; color:var(--chalk-dim);}
 
   .thisweek-table th:nth-child(3), .thisweek-table td:nth-child(3){text-align:center;}
   .player-table th:nth-child(1), .player-table td:nth-child(1),
@@ -375,9 +397,6 @@
   <header class="board">
     <h1>Pick of the Week</h1>
     <div class="presented-by">Presented by: Tabasco Tim</div>
-    <div class="meta" id="headerMeta">
-      <span class="pill">Week <b id="curWeekLabel">&mdash;</b> / <b id="totalWeeksLabel">&mdash;</b></span>
-    </div>
     <div class="header-submit">
       <div class="rules-box">
         <h3 class="rules-title">Rules</h3>
@@ -393,6 +412,10 @@
           <li>Season Long pick required, &minus;140 or higher &mdash; counts as a win once it's settled. Use the Submit Season Long Pick button below</li>
           <li>Ties are settled in the playoffs</li>
         </ul>
+      </div>
+      <div class="week-banner">
+        <div class="week-banner-main"><span class="week-banner-word">Week</span><span class="week-banner-num" id="curWeekLabel">&mdash;</span></div>
+        <div class="week-banner-sub" id="weekBannerSub">of 18</div>
       </div>
       <a class="submit-btn" href="https://forms.gle/oTVjsyrjn7J2AUhs8" target="_blank" rel="noopener">Submit This Week's Pick &rarr;</a>
       <div>
@@ -431,12 +454,13 @@
         <div class="table-scroll">
         <table class="standings-table">
           <thead>
-            <tr><th></th><th>Player</th><th>Record</th><th>Win%</th><th>Streak</th><th>DOTD</th><th>POTY</th><th>&#127919; Season Long</th></tr>
+            <tr><th></th><th>Player</th><th>Record</th><th>Win%</th><th>1st %</th><th>Streak</th><th>DOTD</th><th>POTY</th><th>&#127919; Season Long</th></tr>
           </thead>
           <tbody id="standingsBody"></tbody>
         </table>
         </div>
         </div>
+        <p class="odds-note"><b>1st %</b> = chance of finishing in 1st, from 20,000 simulated finishes of the rest of the season &mdash; counts each person's record so far, the weeks left, and any POTY, DOTD or Season Long pick still unsettled. A dead heat for 1st splits the credit. It's an estimate, not a promise.</p>
       </div>
     </section>
 
@@ -559,7 +583,19 @@ const CONFIG = {
   // standings, not real money). Season Long isn't included in this tracker.
   UNIT_SIZE: 10,
   UNIT_DEFAULT_ODDS: -120,
-  UNIT_DOTD_ODDS: 200
+  UNIT_DOTD_ODDS: 200,
+  // First-place odds (Standings "1st %"): a Monte Carlo simulation of the
+  // rest of the season. Everything below is an ASSUMPTION about the future,
+  // not data — tweak freely if you think the group is sharper/duller than this.
+  SIM_TRIALS: 20000,            // simulated seasons (more = steadier numbers)
+  SIM_SEED: 20260901,           // fixed seed so everyone sees the same numbers
+  SIM_BASE_WIN_PROB: 0.53,      // typical hit rate on -120-or-steeper picks, after the book's cut
+  SIM_PRIOR_PICKS: 100,         // how hard the group-wide rate is pulled toward the base rate
+  SIM_SHRINK_PICKS: 40,         // how hard each player's rate is pulled toward the group's (small samples lie)
+  SIM_PUSH_PROB: 0.02,          // chance a regular pick pushes (no result)
+  SIM_DOTD_WIN_PROB: 0.33,      // a +200 dog is roughly a 1-in-3 shot
+  SIM_DOTD_THRESHOLD: 0.55,     // an unused (optional) DOTD only gets played by someone running below this win % — chasers gamble, leaders hold
+  SIM_SEASONLONG_WIN_PROB: 0.53 // hit rate for an unsettled Season Long pick
 };
 
 function normalizePickType(raw){
@@ -843,6 +879,166 @@ function computeUnits(records){
   return list;
 }
 
+// ============ FIRST-PLACE ODDS (Monte Carlo) ============
+// Plays out the rest of the season thousands of times using each player's
+// CURRENT record plus the rules still in play:
+//   - every remaining weekly pick (the open ones this week + every future week)
+//   - POTY: anyone who hasn't used it MUST play it in some remaining week
+//     (win = POTY_WIN_CREDIT wins, loss = POTY_LOSS_CREDIT losses)
+//   - DOTD: optional, so someone who hasn't used it only plays it when he's
+//     chasing (running under SIM_DOTD_THRESHOLD) and holds it otherwise
+//     (win = DOTD_WIN_CREDIT wins, loss = DOTD_LOSS_CREDIT loss)
+//   - Season Long: anyone whose pick isn't settled gets one more outcome
+//     (counted as the pool counts it: SEASONLONG_WIN/LOSS_CREDIT)
+// Final order uses the same rules as the Standings table (win %, then wins,
+// then fewer losses). Anyone still exactly tied for 1st splits the credit,
+// since ties get settled in the playoffs. Per-player hit rates are shrunk hard
+// toward the group's rate — a few weeks of results mostly say who's ahead, not
+// who's better — so the standings lead (not "skill") drives most of the odds.
+function mulberry32(seed){
+  let a = seed >>> 0;
+  return function(){
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Weeks still to come AFTER the current one (picks for the current week that
+// aren't graded yet are counted separately, from the pending records).
+function remainingFutureWeeks(records){
+  const info = computeCurrentWeek();
+  if(info){
+    if(info.status === 'pre') return CONFIG.TOTAL_WEEKS;
+    if(info.status === 'done') return 0;
+    return Math.max(0, CONFIG.TOTAL_WEEKS - info.week);
+  }
+  const weeks = (records || []).map(r => r.week).filter(w => w !== null);
+  return Math.max(0, CONFIG.TOTAL_WEEKS - (weeks.length ? Math.max(...weeks) : 0));
+}
+
+function computeTitleOdds(standings, records){
+  const P = standings.length;
+  const out = {};
+  if(!P) return out;
+  const N = CONFIG.SIM_TRIALS;
+  const futureWeeks = remainingFutureWeeks(records);
+
+  // Hit-rate estimates from straight (non-DOTD) weekly picks that have a result.
+  let gW = 0, gG = 0;
+  const skill = {};
+  const pendingTypes = {};
+  (records || []).forEach(r => {
+    if(r.result === 'pending'){
+      (pendingTypes[r.name] = pendingTypes[r.name] || []).push(r.pickType);
+      return;
+    }
+    if(r.pickType === 'dotd') return;
+    if(r.result !== 'win' && r.result !== 'loss') return;
+    const sk = skill[r.name] || (skill[r.name] = {w:0, g:0});
+    sk.g++; gG++;
+    if(r.result === 'win'){ sk.w++; gW++; }
+  });
+  const pGroup = (gW + CONFIG.SIM_PRIOR_PICKS * CONFIG.SIM_BASE_WIN_PROB) / (gG + CONFIG.SIM_PRIOR_PICKS);
+
+  const pl = standings.map(p => {
+    const sk = skill[p.name] || {w:0, g:0};
+    const settledSL = p.seasonLongResult === 'win' || p.seasonLongResult === 'loss' || p.seasonLongResult === 'push';
+    return {
+      w0: p.wins, l0: p.losses,
+      pHit: (sk.w + CONFIG.SIM_SHRINK_PICKS * pGroup) / (sk.g + CONFIG.SIM_SHRINK_PICKS),
+      pending: pendingTypes[p.name] || [],
+      mustPoty: p.potyCount === 0,
+      hasDotd: p.dotdCount === 0,
+      slOpen: !settledSL
+    };
+  });
+
+  const rand = mulberry32(CONFIG.SIM_SEED);
+  const pPush = CONFIG.SIM_PUSH_PROB;
+  const pDotd = CONFIG.SIM_DOTD_WIN_PROB;
+  const dW = CONFIG.DOTD_WIN_CREDIT, dL = CONFIG.DOTD_LOSS_CREDIT;
+  const yW = CONFIG.POTY_WIN_CREDIT, yL = CONFIG.POTY_LOSS_CREDIT;
+  const sW = CONFIG.SEASONLONG_WIN_CREDIT, sL = CONFIG.SEASONLONG_LOSS_CREDIT;
+  const W = new Int32Array(P), L = new Int32Array(P);
+  const tied = new Int32Array(P);
+  const first = new Float64Array(P);
+
+  // one simulated pick of a given type for player `q`; adds to w/l via the returned pair encoding
+  function play(q, type, acc){
+    const u = rand();
+    if(type === 'dotd'){
+      if(u < pDotd) acc.w += dW; else acc.l += dL;
+    } else if(u < pPush){
+      /* push: no change */
+    } else if((u - pPush) / (1 - pPush) < q.pHit){
+      acc.w += (type === 'poty' ? yW : 1);
+    } else {
+      acc.l += (type === 'poty' ? yL : 1);
+    }
+  }
+
+  const acc = {w:0, l:0};
+  for(let t = 0; t < N; t++){
+    for(let i = 0; i < P; i++){
+      const q = pl[i];
+      acc.w = q.w0; acc.l = q.l0;
+      for(let k = 0; k < q.pending.length; k++) play(q, q.pending[k], acc);
+
+      let potyWeek = -1, dotdWeek = -1;
+      if(futureWeeks > 0){
+        if(q.mustPoty) potyWeek = Math.floor(rand() * futureWeeks);
+        // earliest week he'd consider spending the DOTD; he only does if he's chasing by then
+        if(q.hasDotd) dotdWeek = Math.floor(rand() * futureWeeks);
+      }
+      let dotdArmed = q.hasDotd;
+      for(let k = 0; k < futureWeeks; k++){
+        let type = 'normal';
+        if(k === potyWeek) type = 'poty';
+        else if(dotdArmed && k >= dotdWeek){
+          const tot = acc.w + acc.l;
+          if((tot ? acc.w / tot : 0.5) < CONFIG.SIM_DOTD_THRESHOLD){ type = 'dotd'; dotdArmed = false; }
+        }
+        play(q, type, acc);
+      }
+      if(q.slOpen){
+        if(rand() < CONFIG.SIM_SEASONLONG_WIN_PROB) acc.w += sW; else acc.l += sL;
+      }
+      W[i] = acc.w; L[i] = acc.l;
+    }
+
+    // who finished on top? (same order as the Standings table)
+    let best = 0, nTied = 1;
+    tied[0] = 0;
+    for(let i = 1; i < P; i++){
+      const ti = W[i] + L[i], tb = W[best] + L[best];
+      const numI = ti ? W[i] : 0, denI = ti || 1;
+      const numB = tb ? W[best] : 0, denB = tb || 1;
+      const a = numI * denB, b = numB * denI;
+      let c = a !== b ? (a > b ? 1 : -1)
+            : (W[i] !== W[best] ? (W[i] > W[best] ? 1 : -1)
+            : (L[i] !== L[best] ? (L[i] < L[best] ? 1 : -1) : 0));
+      if(c > 0){ best = i; nTied = 1; tied[0] = i; }
+      else if(c === 0){ tied[nTied++] = i; }
+    }
+    const share = 1 / nTied;
+    for(let k = 0; k < nTied; k++) first[tied[k]] += share;
+  }
+
+  standings.forEach((p, i) => { out[p.name] = first[i] / N; });
+  return out;
+}
+
+function fmtTitleOdds(prob){
+  if(prob === undefined || prob === null || isNaN(prob)) return '&mdash;';
+  const pct = prob * 100;
+  if(pct >= 99.5) return '&gt;99%';
+  if(pct < 0.5) return '&lt;1%';
+  if(pct < 10) return pct.toFixed(1) + '%';
+  return Math.round(pct) + '%';
+}
+
 function resultBadge(result){
   if(result === 'win') return '<span class="badge win">Win</span>';
   if(result === 'loss') return '<span class="badge loss">Loss</span>';
@@ -890,7 +1086,8 @@ function renderStandings(){
       <td class="name">${p.name}</td>
       <td>${p.wins}-${p.losses}${p.pushes > 0 ? '-'+p.pushes : ''}</td>
       <td class="winpct">${p.total ? (p.winPct*100).toFixed(0)+'%' : '&mdash;'}</td>
-      <td class="${p.streak>=2 && p.streakType==='win' ? 'streak-hot' : (p.streak>=2 && p.streakType==='loss' ? 'streak-cold':'')}">
+      <td class="title-odds">${fmtTitleOdds(p.titleOdds)}</td>
+      <td class="${p.streak>=1 && p.streakType==='win' ? 'streak-win' : (p.streak>=1 && p.streakType==='loss' ? 'streak-loss':'')}">
         ${p.streak ? p.streak + (p.streakType==='win' ? 'W':'L') : '&mdash;'}
       </td>
       <td>${usageCell('dotd', p.dotdCount)}</td>
@@ -1062,14 +1259,19 @@ document.querySelectorAll('nav.tabs button').forEach(btn => {
 
 function updateHeader(){
   const info = computeCurrentWeek();
-  let label = '\u2014';
-  if(info){
-    if(info.status === 'pre') label = 'not started';
-    else if(info.status === 'done') label = 'final';
-    else label = info.week;
+  const numEl = document.getElementById('curWeekLabel');
+  const subEl = document.getElementById('weekBannerSub');
+  if(!numEl || !subEl) return;
+  if(info && info.status === 'active'){
+    numEl.textContent = info.week;
+    subEl.textContent = 'of ' + CONFIG.TOTAL_WEEKS;
+  } else if(info && info.status === 'done'){
+    numEl.textContent = CONFIG.TOTAL_WEEKS;
+    subEl.textContent = 'season complete';
+  } else {
+    numEl.textContent = '\u2014';
+    subEl.textContent = 'season not started yet';
   }
-  document.getElementById('curWeekLabel').textContent = label;
-  document.getElementById('totalWeeksLabel').textContent = CONFIG.TOTAL_WEEKS;
 }
 
 function showError(detail){
@@ -1100,6 +1302,15 @@ async function init(){
     renderHistory();
     renderPlayers();
     renderUnits();
+    // First-place odds take a moment of number-crunching, so paint the page
+    // first and fill that column in right after instead of making anyone wait.
+    setTimeout(() => {
+      try{
+        const titleOdds = computeTitleOdds(ALL_STANDINGS, ALL_RECORDS);
+        ALL_STANDINGS.forEach(p => { p.titleOdds = titleOdds[p.name]; });
+        renderStandings();
+      } catch(e){ /* odds are a nice-to-have; never break the page over them */ }
+    }, 0);
   } catch(err){
     showError(String(err));
   }
