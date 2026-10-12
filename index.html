@@ -289,6 +289,28 @@
   .sl-detail{font-size:0.8rem; color:var(--chalk-dim); margin-top:4px; line-height:1.5;}
   .sl-msg{margin:10px 0 0; font-size:0.85rem; line-height:1.55; color:var(--chalk-dim);}
   .sl-foot{margin-top:14px; font-size:0.7rem; color:var(--chalk-dim); line-height:1.5;}
+
+  .units-h{font-size:1rem; margin:24px 0 4px; font-weight:700;}
+  .units-sub{color:var(--chalk-dim); font-size:0.78rem; margin:0 0 10px; line-height:1.5;}
+  .scroll-x{overflow-x:auto; -webkit-overflow-scrolling:touch;}
+  .bt-table{width:100%; border-collapse:collapse;}
+  .bt-name{font-weight:700;}
+  .bt-total td{border-top:1px solid var(--line-strong); font-weight:700;}
+  .bt-barcell{width:34%; min-width:120px;}
+  .bt-track{position:relative; height:14px;}
+  .bt-mid{position:absolute; left:50%; top:-3px; bottom:-3px; width:1px; background:var(--line-strong);}
+  .bt-bar{position:absolute; top:2px; height:10px; border-radius:3px;}
+  .bt-bar.pos{background:var(--chalk-green);} .bt-bar.neg{background:var(--chalk-red);}
+  .bt-matrix th, .bt-matrix td{text-align:right; white-space:nowrap;}
+  .bt-matrix th:first-child, .bt-matrix td:first-child{text-align:left;}
+  .units-audit{margin-top:22px; border-top:1px solid var(--line); padding-top:12px;}
+  .units-audit summary{cursor:pointer; font-weight:700; font-size:0.95rem;}
+  .audit-scroll{max-height:340px; overflow:auto; border:1px solid var(--line); border-radius:8px;}
+  .audit-scroll .bt-table td, .audit-scroll .bt-table th{padding:8px 10px; white-space:nowrap;}
+  .audit-scroll .bt-pick{white-space:normal; min-width:180px;}
+  .bt-why{font-weight:400; font-size:0.72rem; color:var(--chalk-dim); margin-top:2px;}
+  tr.bt-flag td{background:rgba(214,170,90,0.10);}
+  @media (max-width:560px){ .bt-barcell{display:none;} }
   .units-positive{color:var(--chalk-green); font-weight:700;}
   .units-negative{color:var(--chalk-red); font-weight:700;}
   .units-total-box{
@@ -538,6 +560,31 @@
           </thead>
           <tbody id="unitsBody"></tbody>
         </table>
+
+        <h3 class="units-h">By bet type</h3>
+        <p class="units-sub">Every graded bet, sorted by sport and kind. Same unit math as above, so these rows add up to the Group Total. Season Long bets count once they're marked Win/Loss, at &minus;120. Pending bets aren't counted until they're graded.</p>
+        <div class="scroll-x">
+          <table class="bt-table">
+            <thead><tr><th>Bet type</th><th>Bets</th><th>W-L-T</th><th>Net</th><th class="bt-barcell"></th></tr></thead>
+            <tbody id="unitsTypeBody"></tbody>
+          </table>
+        </div>
+        <p class="units-sub" id="unitsFlagNote" style="margin-top:10px;"></p>
+
+        <h3 class="units-h">By player</h3>
+        <p class="units-sub">Who's making or losing money on what.</p>
+        <div class="scroll-x">
+          <table class="bt-table bt-matrix">
+            <thead id="unitsMatrixHead"></thead>
+            <tbody id="unitsMatrixBody"></tbody>
+          </table>
+        </div>
+
+        <details class="units-audit">
+          <summary>How each bet was sorted</summary>
+          <p class="units-sub">The site reads each pick and guesses its sport and type; anything it's unsure about is listed first. To fix one, add a <b>Sport</b> and/or <b>Bet type</b> column to the sheet and fill it in on that row (NFL or CFB; Spread, Total, Prop or Moneyline) &mdash; the site uses what you typed instead of guessing.</p>
+          <div class="audit-scroll" id="unitsAudit"></div>
+        </details>
       </div>
     </section>
   </div>
@@ -602,7 +649,11 @@ const CONFIG = {
     odds:      ['odds','line'],
     result:    ['result','outcome','win/loss','w/l'],
     status:    ['submission status','status'],
-    pickType:  ['is this your dotd or poty?','dotd or poty','dotd/poty','pick type']
+    pickType:  ['is this your dotd or poty?','dotd or poty','dotd/poty','pick type'],
+    // OPTIONAL hand-fix columns: add "Sport" and/or "Bet type" to the sheet and fill them in on any
+    // row the Units tab sorted wrongly (Sport: NFL / CFB / other; Bet type: Spread / Total / Prop / Moneyline).
+    sport:     ['sport','league'],
+    betType:   ['bet type','type of bet','bet kind']
   },
   // Season Long play: one NFL/CFB team win total or player season prop, over/under,
   // per person for the whole year. Scoring is symmetric for now (win and loss both
@@ -643,6 +694,9 @@ const CONFIG = {
   UNIT_SIZE: 10,
   UNIT_DEFAULT_ODDS: -120,
   UNIT_DOTD_ODDS: 200,
+  // Season Long bets count in the units (once marked Win/Loss) as their own "Season Long" row.
+  UNIT_INCLUDE_SEASONLONG: true,
+  UNIT_SEASONLONG_ODDS: -120,
   // First-place odds (Standings "Chance of Winning"): a Monte Carlo simulation of the
   // rest of the season. Everything below is an ASSUMPTION about the future,
   // not data — tweak freely if you think the group is sharper/duller than this.
@@ -749,6 +803,8 @@ function loadRecords(csvText){
     result:    matchColumn(headers, CONFIG.COLUMNS.result),
     status:    matchColumn(headers, CONFIG.COLUMNS.status),
     pickType:  matchColumn(headers, CONFIG.COLUMNS.pickType),
+    sport:     matchColumn(headers, CONFIG.COLUMNS.sport),
+    betType:   matchColumn(headers, CONFIG.COLUMNS.betType),
   };
   const records = [];
   for(let i=1;i<rows.length;i++){
@@ -769,7 +825,9 @@ function loadRecords(csvText){
       pick: idx.pick !== -1 ? (r[idx.pick]||'').trim() : '',
       odds: idx.odds !== -1 ? (r[idx.odds]||'').trim() : '',
       result: normalizeResult(idx.result !== -1 ? r[idx.result] : ''),
-      pickType: normalizePickType(idx.pickType !== -1 ? r[idx.pickType] : '')
+      pickType: normalizePickType(idx.pickType !== -1 ? r[idx.pickType] : ''),
+      sportTag: idx.sport !== -1 ? (r[idx.sport]||'').trim() : '',
+      betTypeTag: idx.betType !== -1 ? (r[idx.betType]||'').trim() : ''
     });
   }
   return records;
@@ -925,20 +983,155 @@ function unitProfitForOdds(odds, unit){
   return odds < 0 ? unit * (100/Math.abs(odds)) : unit * (odds/100);
 }
 
-function computeUnits(records){
+// ============ UNITS BY BET TYPE ============
+// Sorts every bet into NFL Spreads / NFL Totals / CFB Spreads / CFB Totals / Player Props /
+// Season Long / Other, by READING THE PICK TEXT (the sheet has no sport or bet-type column).
+// The NFL has only 32 teams, so a team is NFL if it's one of those; anything else in a football
+// pool is assumed college. Names both leagues use (Miami, Houston, Washington...) are decided by
+// the size of the spread/total when possible, otherwise left in "Other" and flagged so a human
+// can look. Moneylines go to "Other" too. Optional "Sport" / "Bet type" sheet columns override this.
+const UNIT_BUCKETS = ['NFL Spreads','NFL Totals','CFB Spreads','CFB Totals','Player Props','Season Long','Other'];
+const NFL_NICK  = ['cardinals','falcons','ravens','bills','panthers','bears','bengals','browns','cowboys','broncos','lions','packers','texans','colts','jaguars','chiefs','raiders','chargers','rams','dolphins','vikings','patriots','saints','giants','jets','eagles','steelers','49ers','seahawks','buccaneers','titans','commanders'];
+const NFL_ALIAS = ['jags','pats','niners','bucs','ny giants','ny jets','la rams','la chargers','philly'];
+const NFL_FULL  = ['arizona cardinals','atlanta falcons','baltimore ravens','buffalo bills','carolina panthers','chicago bears','cincinnati bengals','cleveland browns','dallas cowboys','denver broncos','detroit lions','green bay packers','houston texans','indianapolis colts','jacksonville jaguars','kansas city chiefs','las vegas raiders','los angeles chargers','los angeles rams','miami dolphins','minnesota vikings','new england patriots','new orleans saints','new york giants','new york jets','philadelphia eagles','pittsburgh steelers','san francisco 49ers','seattle seahawks','tampa bay buccaneers','tennessee titans','washington commanders'];
+const NFL_CITY  = ['arizona','atlanta','baltimore','buffalo','carolina','chicago','cincinnati','cleveland','dallas','denver','detroit','green bay','houston','indianapolis','jacksonville','kansas city','las vegas','los angeles','miami','minnesota','new england','new orleans','new york','philadelphia','pittsburgh','san francisco','seattle','tampa bay','tennessee','washington'];
+const SHARED_CITY = ['arizona','buffalo','carolina','cincinnati','houston','miami','minnesota','pittsburgh','tennessee','washington']; // a college team goes by the same name
+const STAT_WORDS  = /\b(tds?|touchdowns?|yards?|yds|rush\w*|rec\w*|pass\w*|sacks?|ints?|interceptions?|completions?|attempts?|tackles?|receptions?|anytime|longest)\b/i;
+const PARLAY_WORDS = /\b(parlay|sgp|teaser|legs?|same game)\b/i;
+
+function nflRelation(team){
+  const k = String(team).toLowerCase().replace(/[^a-z0-9& ]/g, ' ').replace(/\s+/g, ' ').trim();
+  if(!k) return null;
+  if(NFL_NICK.includes(k) || NFL_ALIAS.includes(k) || NFL_FULL.includes(k)) return 'nfl';
+  if(NFL_CITY.includes(k)) return SHARED_CITY.includes(k) ? 'both' : 'nfl';
+  return null;
+}
+function cleanTeamText(t){
+  return t.replace(/\b(over|under)\b/ig, ' ').replace(/[-+]?\d+(?:\.\d+)?/g, ' ').replace(/[-\u2013:]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// -> {sport:'NFL'|'CFB'|'Any'|null, type:'Spread'|'Total'|'Prop'|'Moneyline'|null, note, flag}
+function classifyPick(raw){
+  let t = (raw || '').trim();
+  const out = {sport:null, type:null, note:'', flag:false};
+  if(!t){ out.note = 'empty pick'; out.flag = true; return out; }
+  t = t.replace(/\(\s*[+-]?\d{3,4}\s*\)\s*$/, '').trim();            // "Georgia Tech -6.5 (-110)" -> drop the price
+  if(PARLAY_WORDS.test(t)){ out.note = 'looks like a parlay'; out.flag = true; return out; }
+  const dir = /\b(over|under)\b/i.test(t);
+  const nums = t.match(/\d+(?:\.\d+)?/g) || [];
+
+  if(dir){
+    if(STAT_WORDS.test(t)){ out.type = 'Prop'; out.sport = 'Any'; return out; }
+    const mu = t.match(/^(.+?)\s+(?:at|vs\.?|v|@|\/)\s+(.+?)(?:\s*[-\u2013:]?\s*(?:over|under)\b.*)?$/i);
+    if(mu){
+      out.type = 'Total';
+      const line = nums.length ? parseFloat(nums[nums.length - 1]) : null;
+      const a = nflRelation(cleanTeamText(mu[1])), b = nflRelation(cleanTeamText(mu[2]));
+      if(a === 'nfl' || b === 'nfl') out.sport = 'NFL';
+      else if(a === 'both' || b === 'both'){
+        if(line !== null && line >= 56){ out.sport = 'CFB'; out.note = 'a total of ' + line + ' is too high for the NFL'; }
+        else if(line !== null && line <= 44){ out.sport = 'NFL'; out.note = 'a total of ' + line + ' is too low for college'; }
+        else { out.note = 'NFL and college both have a team by that name \u2014 couldn\u2019t tell which'; out.flag = true; }
+      } else out.sport = 'CFB';
+      return out;
+    }
+    out.note = 'Over/Under with no matchup or stat \u2014 team total or prop?'; out.flag = true; return out;
+  }
+
+  let marker = null, team = null;
+  const m1 = t.match(/^(ML|PK|[+-]\d+(?:\.\d+)?)\s+(.+)$/i);
+  if(m1){ marker = m1[1]; team = m1[2]; }
+  else { const m2 = t.match(/^(.+?)\s+(ML|PK|[+-]\d+(?:\.\d+)?)$/i); if(m2){ team = m2[1]; marker = m2[2]; } }
+  if(marker){
+    if(/\d/.test(team)){ out.note = 'looks like more than one bet'; out.flag = true; return out; }
+    const isML = /^ml$/i.test(marker) || Math.abs(parseFloat(marker)) >= 100;
+    out.type = isML ? 'Moneyline' : 'Spread';
+    const rel = nflRelation(team);
+    if(rel === 'nfl') out.sport = 'NFL';
+    else if(rel === 'both'){
+      const size = /^pk$/i.test(marker) ? 0 : Math.abs(parseFloat(marker));
+      if(!isML && size > 17){ out.sport = 'CFB'; out.note = 'a ' + size + '-point spread is too big for the NFL'; }
+      else if(!isML){ out.note = 'NFL and college both have a "' + team + '" \u2014 couldn\u2019t tell which'; out.flag = true; }
+    } else out.sport = 'CFB';
+    return out;
+  }
+  out.note = 'format not recognized'; out.flag = true; return out;
+}
+
+// bucket for one weekly bet; honors the optional hand-fix columns
+function unitBucket(rec){
+  const c = classifyPick(rec.pick);
+  let sport = c.sport, type = c.type, note = c.note, flag = c.flag;
+  const st = (rec.sportTag || '').toLowerCase(), bt = (rec.betTypeTag || '').toLowerCase();
+  const tagged = !!(st || bt);
+  if(st) sport = /nfl|pro/.test(st) ? 'NFL' : (/cfb|college|ncaa/.test(st) ? 'CFB' : 'Other');
+  if(bt) type = /prop/.test(bt) ? 'Prop' : (/total|o\/u|over|under/.test(bt) ? 'Total' : (/spread|ats|line/.test(bt) ? 'Spread' : (/money|ml/.test(bt) ? 'Moneyline' : 'Other')));
+  let bucket = 'Other';
+  if(type === 'Prop') bucket = 'Player Props';
+  else if((type === 'Spread' || type === 'Total') && (sport === 'NFL' || sport === 'CFB')) bucket = sport + ' ' + (type === 'Spread' ? 'Spreads' : 'Totals');
+  if(tagged){ note = 'tagged on the sheet'; flag = false; }
+  else if(bucket === 'Other' && !note) note = type === 'Moneyline' ? 'moneyline' : 'moneyline or other';
+  return {bucket, note, flag: flag && bucket === 'Other'};
+}
+
+function unitOutcome(result, odds){
+  if(result === 'win')  return {res:'win',  net: unitProfitForOdds(odds, CONFIG.UNIT_SIZE)};
+  if(result === 'loss') return {res:'loss', net: -CONFIG.UNIT_SIZE};
+  if(result === 'push') return {res:'push', net: 0};
+  return null;
+}
+
+// Every bet once, with its bucket and dollar result. Pending bets are listed (res:null) only so the
+// "how each bet was sorted" list can show them; they never touch a total.
+function buildUnitBets(records, seasonLongRecords){
+  const bets = [];
+  (records || []).forEach(rec => {
+    const odds = rec.pickType === 'dotd' ? CONFIG.UNIT_DOTD_ODDS : CONFIG.UNIT_DEFAULT_ODDS;
+    const o = unitOutcome(rec.result, odds);
+    const b = unitBucket(rec);
+    bets.push({name:rec.name, week:rec.week, pick:rec.pick, bucket:b.bucket, note:b.note, flag:b.flag, res:o ? o.res : null, net:o ? o.net : 0});
+  });
+  if(CONFIG.UNIT_INCLUDE_SEASONLONG){
+    (seasonLongRecords || []).forEach(rec => {
+      const o = unitOutcome(rec.result, CONFIG.UNIT_SEASONLONG_ODDS);
+      bets.push({name:rec.name, week:null, pick:rec.pick, bucket:'Season Long', note:'season-long bet', flag:false, res:o ? o.res : null, net:o ? o.net : 0});
+    });
+  }
+  return bets;
+}
+
+function unitsFromBets(bets){
   const byName = {};
   (CONFIG.ROSTER || []).forEach(n => { byName[n] = {name:n, net:0, wins:0, losses:0, pushes:0}; });
-  (records || []).forEach(rec => {
-    if(!byName[rec.name]) byName[rec.name] = {name:rec.name, net:0, wins:0, losses:0, pushes:0};
-    const p = byName[rec.name];
-    const odds = rec.pickType === 'dotd' ? CONFIG.UNIT_DOTD_ODDS : CONFIG.UNIT_DEFAULT_ODDS;
-    if(rec.result === 'win'){ p.net += unitProfitForOdds(odds, CONFIG.UNIT_SIZE); p.wins++; }
-    else if(rec.result === 'loss'){ p.net -= CONFIG.UNIT_SIZE; p.losses++; }
-    else if(rec.result === 'push'){ p.pushes++; }
+  bets.forEach(b => {
+    if(!b.res) return;
+    if(!byName[b.name]) byName[b.name] = {name:b.name, net:0, wins:0, losses:0, pushes:0};
+    const p = byName[b.name];
+    p.net += b.net;
+    if(b.res === 'win') p.wins++; else if(b.res === 'loss') p.losses++; else p.pushes++;
   });
-  const list = Object.values(byName);
-  list.sort((a,b) => b.net - a.net);
-  return list;
+  return Object.values(byName).sort((a, b) => b.net - a.net);
+}
+
+function computeUnits(records, seasonLongRecords){
+  return unitsFromBets(buildUnitBets(records, seasonLongRecords));
+}
+
+function unitsByType(bets, players){
+  const cats = UNIT_BUCKETS.filter(n => n !== 'Season Long' || CONFIG.UNIT_INCLUDE_SEASONLONG).map(name => ({name, n:0, w:0, l:0, t:0, net:0}));
+  const byName = {}; cats.forEach(c => { byName[c.name] = c; });
+  const mat = {};
+  const row = () => { const r = {}; cats.forEach(c => { r[c.name] = 0; }); return r; };
+  players.forEach(p => { mat[p.name] = row(); });
+  bets.forEach(b => {
+    if(!b.res || !byName[b.bucket]) return;
+    const c = byName[b.bucket];
+    c.n++; c.net += b.net;
+    if(b.res === 'win') c.w++; else if(b.res === 'loss') c.l++; else c.t++;
+    if(!mat[b.name]) mat[b.name] = row();
+    mat[b.name][b.bucket] += b.net;
+  });
+  return {cats, mat};
 }
 
 // ============ FIRST-PLACE ODDS (Monte Carlo) ============
@@ -1152,6 +1345,7 @@ function seasonLongCell(p){
 let ALL_RECORDS = [];
 let ALL_STANDINGS = [];
 let ALL_UNITS = [];
+let UNIT_BETS = [];
 
 // ---- sorting (click/tap any column heading; tap again to flip direction) ----
 let STANDINGS_SORT = {key:'rank', dir:'asc'};
@@ -1346,6 +1540,59 @@ function renderUnits(){
     totalEl.className = 'units-total-amount ' + (positive ? 'units-positive' : (negative ? 'units-negative' : ''));
     const sign = negative ? '-' : (positive ? '+' : '');
     totalEl.textContent = `${sign}$${Math.abs(groupTotal).toFixed(2)}`;
+  }
+  renderUnitTypes();
+}
+
+function fmtUnits(x){ return Math.abs(x) < 0.005 ? '$0.00' : (x > 0 ? '+' : '-') + '$' + Math.abs(x).toFixed(2); }
+function unitsCls(x){ return x > 0.004 ? 'units-positive' : (x < -0.004 ? 'units-negative' : ''); }
+function esc2(str){ return String(str).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
+
+function renderUnitTypes(){
+  const tb = document.getElementById('unitsTypeBody');
+  if(!tb) return;
+  const {cats, mat} = unitsByType(UNIT_BETS, ALL_UNITS);
+  const maxAbs = Math.max(1, ...cats.map(c => Math.abs(c.net)));
+  const rec = c => c.w + '-' + c.l + (c.t ? '-' + c.t : '');
+  tb.innerHTML = cats.map(c => {
+    const w = Math.abs(c.net) / maxAbs * 50;
+    const bar = Math.abs(c.net) < 0.005 ? '' : `<span class="bt-bar ${c.net > 0 ? 'pos' : 'neg'}" style="width:${w.toFixed(1)}%;${c.net > 0 ? 'left:50%' : 'right:50%'}"></span>`;
+    return `<tr><td class="bt-name">${c.name}</td><td>${c.n}</td><td>${rec(c)}</td><td class="${unitsCls(c.net)}">${fmtUnits(c.net)}</td><td class="bt-barcell"><div class="bt-track"><span class="bt-mid"></span>${bar}</div></td></tr>`;
+  }).join('');
+  const tot = cats.reduce((a, c) => ({n:a.n+c.n, w:a.w+c.w, l:a.l+c.l, t:a.t+c.t, net:a.net+c.net}), {n:0, w:0, l:0, t:0, net:0});
+  tb.innerHTML += `<tr class="bt-total"><td class="bt-name">All bets</td><td>${tot.n}</td><td>${rec(tot)}</td><td class="${unitsCls(tot.net)}">${fmtUnits(tot.net)}</td><td></td></tr>`;
+
+  const head = document.getElementById('unitsMatrixHead'), body = document.getElementById('unitsMatrixBody');
+  if(head && body){
+    head.innerHTML = '<tr><th>Player</th>' + cats.map(c => `<th>${c.name}</th>`).join('') + '<th>Total</th></tr>';
+    const maxCell = Math.max(1, ...Object.values(mat).flatMap(r => Object.values(r).map(Math.abs)));
+    body.innerHTML = ALL_UNITS.map(p => {
+      const r = mat[p.name] || {};
+      const total = cats.reduce((a, c) => a + (r[c.name] || 0), 0);
+      const cells = cats.map(c => {
+        const v = r[c.name] || 0, a = Math.min(Math.abs(v) / maxCell, 1) * 0.35;
+        const bg = v > 0.004 ? `background:rgba(63,166,109,${a.toFixed(2)})` : (v < -0.004 ? `background:rgba(184,92,74,${a.toFixed(2)})` : '');
+        return `<td class="${unitsCls(v)}" style="${bg}">${Math.abs(v) < 0.005 ? '&mdash;' : fmtUnits(v)}</td>`;
+      }).join('');
+      return `<tr><td class="bt-name">${p.name}</td>${cells}<td class="${unitsCls(total)}"><b>${fmtUnits(total)}</b></td></tr>`;
+    }).join('');
+  }
+
+  // how each bet was sorted — flagged ones first, so misses are the first thing you see
+  const weekly = UNIT_BETS.filter(b => b.bucket !== 'Season Long');
+  const flagged = weekly.filter(b => b.flag).length;
+  const noteEl = document.getElementById('unitsFlagNote');
+  if(noteEl){
+    noteEl.textContent = flagged
+      ? '\u26A0 ' + flagged + ' bet' + (flagged === 1 ? '' : 's') + ' couldn\u2019t be sorted and ' + (flagged === 1 ? 'is' : 'are') + ' sitting in Other \u2014 open \u201CHow each bet was sorted\u201D below to see which.'
+      : 'All ' + weekly.length + ' weekly bets were sorted automatically.';
+  }
+  const au = document.getElementById('unitsAudit');
+  if(au){
+    const rows = weekly.slice().sort((a, b) => (b.flag - a.flag) || a.name.localeCompare(b.name) || ((a.week || 0) - (b.week || 0)));
+    au.innerHTML = '<table class="bt-table"><thead><tr><th>Player</th><th>Wk</th><th>Pick</th><th>Sorted as</th><th>Result</th></tr></thead><tbody>' +
+      rows.map(b => `<tr class="${b.flag ? 'bt-flag' : ''}"><td class="bt-name">${esc2(b.name)}</td><td>${b.week || ''}</td><td class="bt-pick">${esc2(b.pick)}${b.note && b.note !== 'moneyline' && b.note !== 'moneyline or other' ? `<div class="bt-why">${esc2(b.note)}</div>` : ''}</td><td>${b.flag ? '\u26A0 ' : ''}${b.bucket}</td><td class="${unitsCls(b.net)}">${b.res ? fmtUnits(b.net) : '<span class="prob-note">pending</span>'}</td></tr>`).join('') +
+      '</tbody></table>';
   }
 }
 
@@ -1788,7 +2035,8 @@ async function init(){
     flagDuplicatePicks(ALL_RECORDS);
     const seasonLongRecords = await loadSeasonLongIfConfigured();
     ALL_STANDINGS = computeStandings(ALL_RECORDS, seasonLongRecords);
-    ALL_UNITS = computeUnits(ALL_RECORDS);
+    UNIT_BETS = buildUnitBets(ALL_RECORDS, seasonLongRecords);
+    ALL_UNITS = unitsFromBets(UNIT_BETS);
     document.getElementById('loading').style.display = 'none';
     document.getElementById('app').style.display = 'block';
     updateHeader();
