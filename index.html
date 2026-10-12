@@ -285,6 +285,7 @@
   .sl-state{margin-top:12px; font-weight:700; font-size:0.92rem;}
   .sl-state.won{color:var(--chalk-green);} .sl-state.lost{color:var(--chalk-red);}
   .sl-state.alive{color:var(--chalk-white);} .sl-state.pushonly{color:var(--chalk-dim);}
+  .sl-state.ahead{color:var(--chalk-green);} .sl-state.behind{color:var(--chalk-red);}
   .sl-detail{font-size:0.8rem; color:var(--chalk-dim); margin-top:4px; line-height:1.5;}
   .sl-msg{margin:10px 0 0; font-size:0.85rem; line-height:1.55; color:var(--chalk-dim);}
   .sl-foot{margin-top:14px; font-size:0.7rem; color:var(--chalk-dim); line-height:1.5;}
@@ -377,6 +378,7 @@
   .standings-table th:nth-child(9), .standings-table td:nth-child(9){text-align:center;}
   th[data-sort]{cursor:pointer; user-select:none; -webkit-user-select:none;}
   th[data-sort]:hover{color:var(--chalk-white);}
+  .standings-table th:nth-child(9){white-space:normal; min-width:78px; line-height:1.25;}
   th.sorted.asc::after{content:" \25B2"; font-size:0.6rem;}
   th.sorted.desc::after{content:" \25BC"; font-size:0.6rem;}
   .title-odds{font-weight:700; color:var(--chalk-white);}
@@ -487,13 +489,13 @@
         <div class="table-scroll">
         <table class="standings-table">
           <thead>
-            <tr><th data-sort="rank" title="Tap to sort">#</th><th data-sort="name" title="Tap to sort">Player</th><th data-sort="record" title="Tap to sort">Record</th><th data-sort="winpct" title="Tap to sort">Win%</th><th data-sort="streak" title="Tap to sort">Streak</th><th data-sort="dotd" title="Tap to sort">DOTD</th><th data-sort="poty" title="Tap to sort">POTY</th><th data-sort="seasonlong" title="Tap to sort">&#127919; Season Long</th><th data-sort="odds" title="Tap to sort">1st %</th></tr>
+            <tr><th data-sort="rank" title="Tap to sort">#</th><th data-sort="name" title="Tap to sort">Player</th><th data-sort="record" title="Tap to sort">Record</th><th data-sort="winpct" title="Tap to sort">Win%</th><th data-sort="streak" title="Tap to sort">Streak</th><th data-sort="dotd" title="Tap to sort">DOTD</th><th data-sort="poty" title="Tap to sort">POTY</th><th data-sort="seasonlong" title="Tap to sort">&#127919; Season Long</th><th data-sort="odds" title="Tap to sort">Chance of Winning</th></tr>
           </thead>
           <tbody id="standingsBody"></tbody>
         </table>
         </div>
         </div>
-        <p class="odds-note"><b>1st %</b> = chance of finishing in 1st, from 20,000 simulated finishes of the rest of the season &mdash; counts each person's record so far, the weeks left, and any POTY, DOTD or Season Long pick still unsettled. A dead heat for 1st splits the credit. It's an estimate, not a promise. Tap any column heading to sort; tap a Season Long pick to see how it's tracking.</p>
+        <p class="odds-note"><b>Chance of Winning</b> = chance of finishing in 1st, from 20,000 simulated finishes of the rest of the season &mdash; counts each person's record so far, the weeks left, and any POTY, DOTD or Season Long pick still unsettled. A dead heat for 1st splits the credit. It's an estimate, not a promise. Tap any column heading to sort; tap a Season Long pick to see how it's tracking.</p>
       </div>
     </section>
 
@@ -616,6 +618,22 @@ const CONFIG = {
     result:    ['result','outcome','win/loss','w/l'],
     status:    ['submission status','status']
   },
+  // The Season Long bets, spelled out. These are fixed for the year, so listing them
+  // here (instead of reading the sheet's free text) means "Jax Jaguars" or "Kyler murray
+  // TD OVER" can't confuse the lookup. Keys must match the Name column exactly.
+  //   team bets : league ('nfl' | 'cfb'), team (ESPN's name), direction, line
+  //   player props: athleteId (ESPN's id — there are two NFL "Josh Allen"s, so never look up by name),
+  //                 category + stat (names from ESPN's athlete stats), unit, direction, line
+  SEASONLONG_TRACKERS: {
+    JR:     {kind:'team', league:'nfl', team:'Dallas Cowboys',       direction:'over',  line:9.5,  label:'Dallas Cowboys Over 9.5 Wins'},
+    Tyler:  {kind:'team', league:'nfl', team:'Jacksonville Jaguars', direction:'over',  line:9.5,  label:'Jacksonville Jaguars Over 9.5 Wins'},
+    Justin: {kind:'team', league:'cfb', team:'Kentucky',             direction:'under', line:4.5,  label:'Kentucky Under 4.5 Wins'},
+    Dom:    {kind:'team', league:'nfl', team:'Detroit Lions',        direction:'over',  line:10.5, label:'Detroit Lions Over 10.5 Wins'},
+    Ryan:   {kind:'prop', athleteId:'3918298', athlete:'Josh Allen',   category:'rushing',   stat:'rushingYards',      unit:'rushing yards',   direction:'over', line:499.5,  label:'Josh Allen Rushing Yards Over 499.5'},
+    Tim:    {kind:'prop', athleteId:'4361307', athlete:'Trey McBride', category:'receiving', stat:'receivingYards',    unit:'receiving yards', direction:'over', line:999.5,  label:'Trey McBride Receiving Yards Over 999.5'},
+    Joey:   {kind:'prop', athleteId:'3917315', athlete:'Kyler Murray', category:'passing',   stat:'passingTouchdowns', unit:'passing TDs',     direction:'over', line:18.5,   label:'Kyler Murray Passing TDs Over 18.5'},
+    Dylan:  {kind:'prop', athleteId:'3918298', athlete:'Josh Allen',   category:'passing',   stat:'passingYards',      unit:'passing yards',   direction:'over', line:3599.5, label:'Josh Allen Passing Yards Over 3,599.5'}
+  },
   // Units tracker: every weekly pick (normal + POTY) is simulated as a flat
   // $10 bet at -120 odds; a DOTD pick is simulated at +200 instead, since
   // it's the one category that's actually an underdog by rule. This is a
@@ -625,7 +643,7 @@ const CONFIG = {
   UNIT_SIZE: 10,
   UNIT_DEFAULT_ODDS: -120,
   UNIT_DOTD_ODDS: 200,
-  // First-place odds (Standings "1st %"): a Monte Carlo simulation of the
+  // First-place odds (Standings "Chance of Winning"): a Monte Carlo simulation of the
   // rest of the season. Everything below is an ASSUMPTION about the future,
   // not data — tweak freely if you think the group is sharper/duller than this.
   SIM_TRIALS: 20000,            // simulated seasons (more = steadier numbers)
@@ -1403,6 +1421,16 @@ const SL_LEAGUES = {
   cfb: {label:'College football', path:'football/college-football', games:12}  // assumes a 12-game regular season
 };
 const slStandingsCache = {};
+const SL_CACHE_MS = 10 * 60 * 1000;
+// one shared request per key; reused for 10 minutes, and a failed request is never kept
+function slCached(cache, key, make){
+  const hit = cache[key];
+  if(hit && Date.now() - hit.t < SL_CACHE_MS) return hit.job;
+  const job = make();
+  cache[key] = {t: Date.now(), job};
+  job.catch(() => { if(cache[key] && cache[key].job === job) delete cache[key]; });
+  return job;
+}
 
 function esc(str){
   return String(str).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
@@ -1447,11 +1475,10 @@ function slCollectEntries(node, out, seasonTypes){
 // URL has been seen serving PRESEASON records, which would show the wrong win
 // count, so a preseason-only answer is flagged and never shown as real.
 async function slLoadLeague(key){
-  if(slStandingsCache[key]) return slStandingsCache[key];
-  const spec = SL_LEAGUES[key];
-  const base = 'https://site.api.espn.com/apis/v2/sports/' + spec.path + '/standings';
-  const urls = [base + '?season=' + slSeasonYear() + '&seasontype=2', base];
-  const job = (async () => {
+  return slCached(slStandingsCache, key, () => (async () => {
+    const spec = SL_LEAGUES[key];
+    const base = 'https://site.api.espn.com/apis/v2/sports/' + spec.path + '/standings';
+    const urls = [base + '?season=' + slSeasonYear() + '&seasontype=2', base];
     let fallback = null, lastErr = null;
     for(const url of urls){
       try{
@@ -1469,10 +1496,7 @@ async function slLoadLeague(key){
     }
     if(fallback) return fallback;
     throw lastErr || new Error('unavailable');
-  })();
-  slStandingsCache[key] = job;
-  job.catch(() => { delete slStandingsCache[key]; }); // let a later tap retry after a failure
-  return job;
+  })());
 }
 
 // Exact-name matching only (name, nickname, city/school, full name, abbreviation).
@@ -1497,8 +1521,8 @@ function slEntryRecord(entry){
   return {w, l, t: isNaN(t) ? 0 : t};
 }
 
-async function slFindTeams(teamText){
-  const keys = Object.keys(SL_LEAGUES);
+async function slFindTeams(teamText, onlyLeague){
+  const keys = onlyLeague ? [onlyLeague] : Object.keys(SL_LEAGUES);
   const settled = await Promise.allSettled(keys.map(k => slLoadLeague(k)));
   const found = [], unavailable = [];
   settled.forEach((r, i) => {
@@ -1511,7 +1535,7 @@ async function slFindTeams(teamText){
       }
     });
   });
-  return {found, unavailable};
+  return {found, unavailable, searched: keys.length};
 }
 
 // Where does an Over/Under win total stand, given the record and games left?
@@ -1553,9 +1577,9 @@ function slCardHTML(parsed, f){
   const icon = a.state === 'won' ? '\u2705 ' : (a.state === 'lost' ? '\u274C ' : '');
   let html = '<div class="sl-team">' +
     '<div class="sl-team-name"><span>' + esc(f.team.displayName || f.team.name) + '</span><span class="sl-league">' + esc(spec.label) + '</span></div>' +
-    '<div class="sl-record">' + f.rec.w + ' wins<small>' + esc(recText) + '</small></div>' +
+    '<div class="sl-record">' + f.rec.w + (f.rec.w === 1 ? ' win' : ' wins') + '<small>' + esc(recText) + '</small></div>' +
     '<div class="sl-bar"><span style="width:' + pct.toFixed(0) + '%"></span></div>' +
-    '<div class="sl-bar-label"><span>' + f.rec.w + ' wins now</span><span>' + a.overNeed + ' = Over cashes</span></div>';
+    '<div class="sl-bar-label"><span>' + f.rec.w + (f.rec.w === 1 ? ' win' : ' wins') + ' now</span><span>' + a.overNeed + ' = Over cashes</span></div>';
   if(f.preseasonOnly){
     html += '<p class="sl-msg">ESPN is still showing <b>preseason</b> numbers for this league, so this record isn\u2019t the real regular-season count. Check back once ESPN switches over.</p>';
   } else {
@@ -1576,32 +1600,166 @@ function slCloseModal(){
   document.body.classList.remove('modal-open');
 }
 
+// ---- player props ----
+function slNum(v){ return parseFloat(String(v).replace(/,/g, '')); }
+function slFmt(n){ return Number(n).toLocaleString('en-US', {maximumFractionDigits: 1}); }
+
+// ESPN's athlete /stats lists one row per season (per team); add up this season's rows.
+function slAthleteSeasonTotal(data, categoryName, statName, year){
+  const cat = (data.categories || []).find(c => c.name === categoryName);
+  const names = cat ? (cat.names || []) : [];
+  const idx = names.indexOf(statName), gpIdx = names.indexOf('gamesPlayed');
+  let total = 0, gp = 0, teamId = null, found = false;
+  if(cat && idx !== -1){
+    (cat.statistics || []).forEach(row => {
+      if(row.season && Number(row.season.year) === year){
+        const v = slNum((row.stats || [])[idx]);
+        if(!isNaN(v)){ total += v; found = true; }
+        if(gpIdx !== -1){ const g = slNum((row.stats || [])[gpIdx]); if(!isNaN(g)) gp += g; }
+        if(row.teamId) teamId = row.teamId;
+      }
+    });
+  }
+  return {total, gp, teamId, none: !found};
+}
+
+// fallback source (different ESPN host): season totals by stat name
+function slCoreSeasonTotal(data, statName){
+  const cats = (data && data.splits && data.splits.categories) || [];
+  let total = null, gp = 0;
+  cats.forEach(c => (c.stats || []).forEach(st => {
+    if(st.name === statName && isFinite(Number(st.value)) && total === null) total = Number(st.value);
+    if(st.name === 'gamesPlayed' && isFinite(Number(st.value)) && !gp) gp = Number(st.value);
+  }));
+  return total === null ? null : {total, gp, teamId: null, none: false};
+}
+
+const slAthleteCache = {};
+function slLoadAthlete(tr){
+  return slCached(slAthleteCache, tr.athleteId + '|' + tr.category + '|' + tr.stat, () => (async () => {
+    const year = slSeasonYear();
+    let lastErr = null;
+    try{
+      const res = await fetch('https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/' + tr.athleteId + '/stats');
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      if(!Array.isArray(data.categories)) throw new Error('unexpected format');
+      return slAthleteSeasonTotal(data, tr.category, tr.stat, year);
+    } catch(e){ lastErr = e; }
+    try{
+      const res = await fetch('https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/seasons/' + year + '/types/2/athletes/' + tr.athleteId + '/statistics/0');
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const r = slCoreSeasonTotal(await res.json(), tr.stat);
+      if(!r) throw new Error('stat not found');
+      return r;
+    } catch(e){ lastErr = e; }
+    throw lastErr || new Error('unavailable');
+  })());
+}
+
+// How many games has the player's TEAM played? (a QB who missed a game still has a team clock running)
+async function slTeamGames(teamId){
+  if(!teamId) return null;
+  try{
+    const {entries, preseasonOnly} = await slLoadLeague('nfl');
+    if(preseasonOnly) return null;
+    const e = entries.find(x => x.team && String(x.team.id) === String(teamId));
+    const rec = e ? slEntryRecord(e) : null;
+    return rec ? rec.w + rec.l + rec.t : null;
+  } catch(err){ return null; }
+}
+
+// Over/Under on a season stat total. A stat can't be "impossible" mid-season the way a win total can,
+// so alive bets are judged by pace (this season's total so far, stretched to a full schedule).
+function slAssessProp(direction, line, total, teamGames, totalGames){
+  const remaining = teamGames === null ? null : Math.max(0, totalGames - teamGames);
+  const pace = teamGames ? (total / teamGames) * totalGames : null;
+  const target = Math.floor(line) + 1;        // total that clears an Over / busts an Under
+  let state, headline, detail;
+  if(direction === 'over'){
+    const need = target - total;
+    if(total > line){ state = 'won'; headline = 'Over has already cleared the line'; }
+    else if(remaining === 0){ state = 'lost'; headline = 'Season is over \u2014 fell short'; }
+    else {
+      state = pace === null ? 'alive' : (pace > line ? 'ahead' : 'behind');
+      headline = state === 'ahead' ? 'On pace' : (state === 'behind' ? 'Behind pace' : 'Still alive');
+      detail = 'Needs ' + slFmt(need) + ' more' + (remaining ? ' over ' + remaining + ' game' + (remaining === 1 ? '' : 's') + ' left (' + slFmt(need / remaining) + ' per game' + (teamGames ? ', vs ' + slFmt(total / teamGames) + ' so far' : '') + ').' : '.');
+    }
+  } else {
+    const room = target - 1 - total;
+    if(total > line){ state = 'lost'; headline = 'Under is dead \u2014 already over the line'; }
+    else if(remaining === 0){ state = 'won'; headline = 'Season is over \u2014 Under cashed'; }
+    else {
+      state = pace === null ? 'alive' : (pace < line ? 'ahead' : 'behind');
+      headline = state === 'ahead' ? 'On pace' : (state === 'behind' ? 'Behind pace' : 'Still alive');
+      detail = 'Can add at most ' + slFmt(room) + ' more before the Under busts' + (remaining ? ' (' + remaining + ' game' + (remaining === 1 ? '' : 's') + ' left).' : '.');
+    }
+  }
+  return {state, headline, detail, pace, remaining, target};
+}
+
+function slPropCardHTML(tr, r, a, teamGames){
+  const over = tr.direction === 'over';
+  const pct = Math.max(0, Math.min(100, (r.total / a.target) * 100));
+  const icon = a.state === 'won' ? '\u2705 ' : (a.state === 'lost' ? '\u274C ' : '');
+  let html = '<div class="sl-team">' +
+    '<div class="sl-team-name"><span>' + esc(tr.athlete) + '</span><span class="sl-league">NFL</span></div>' +
+    '<div class="sl-record">' + slFmt(r.total) + '<small>' + esc(tr.unit) + '</small></div>' +
+    '<div class="sl-bar"><span style="width:' + pct.toFixed(0) + '%"></span></div>' +
+    '<div class="sl-bar-label"><span>' + slFmt(r.total) + ' now</span><span>' + slFmt(a.target) + (over ? ' = Over clears' : ' = Under busts') + '</span></div>';
+  if(r.none){
+    html += '<p class="sl-msg">ESPN has no ' + esc(String(slSeasonYear())) + ' regular-season ' + esc(tr.unit) + ' for this player yet.</p>';
+  } else {
+    html += '<div class="sl-state ' + a.state + '">' + icon + esc(a.headline) + '</div>';
+    if(a.detail) html += '<div class="sl-detail">' + esc(a.detail) + '</div>';
+    if(a.pace !== null) html += '<div class="sl-detail">Pace: ' + slFmt(a.pace) + ' ' + esc(tr.unit) + ' over a ' + SL_LEAGUES.nfl.games + '-game season (line ' + slFmt(tr.line) + '), through ' + teamGames + ' team games.</div>';
+    else if(r.gp) html += '<div class="sl-detail">Through ' + r.gp + ' games played.</div>';
+  }
+  return html + '</div>';
+}
+
 let slOpenToken = 0;
 async function openSeasonLong(name){
   const p = ALL_STANDINGS.find(x => x.name === name);
   if(!p || !p.seasonLongPick) return;
   const token = ++slOpenToken; // a newer tap supersedes a slower, older lookup
-  const head = '<h3 class="sl-title" id="slTitle">' + esc(p.seasonLongPick) + '</h3>' +
+  const tr = (CONFIG.SEASONLONG_TRACKERS || {})[name] || null;
+  const head = '<h3 class="sl-title" id="slTitle">' + esc(tr ? tr.label : p.seasonLongPick) + '</h3>' +
                '<div class="sl-sub">' + esc(name) + '\u2019s Season Long pick</div>';
-  const parsed = parseSeasonLongWinTotal(p.seasonLongPick);
+  const foot = '<div class="sl-foot">Live from ESPN regular-season stats. Doesn\u2019t change the Result column \u2014 mark Win/Loss in the sheet when it\u2019s decided.</div>';
+  const show = html => { if(token === slOpenToken && !document.getElementById('slModal').hidden) slOpenModal(html); };
+
+  if(tr && tr.kind === 'prop'){
+    slOpenModal(head + '<p class="sl-msg">Checking ESPN\u2026</p>');
+    try{
+      const r = await slLoadAthlete(tr);
+      const teamGames = await slTeamGames(r.teamId);
+      const a = slAssessProp(tr.direction, tr.line, r.total, teamGames, SL_LEAGUES.nfl.games);
+      show(head + slPropCardHTML(tr, r, a, teamGames) + foot);
+    } catch(e){
+      show(head + '<p class="sl-msg">Couldn\u2019t reach ESPN\u2019s player stats right now. Try again in a minute.</p>');
+    }
+    return;
+  }
+
+  const parsed = tr ? {team: tr.team, direction: tr.direction, line: tr.line} : parseSeasonLongWinTotal(p.seasonLongPick);
   if(!parsed){
-    slOpenModal(head + '<p class="sl-msg">Live tracking only works for team win totals, like \u201CLions Over 10.5 Wins.\u201D This one is a player prop (or isn\u2019t written as a win total), so there\u2019s no single number to pull automatically \u2014 it needs checking by hand.</p>');
+    slOpenModal(head + '<p class="sl-msg">Live tracking only works for team win totals, like \u201CLions Over 10.5 Wins,\u201D and the player props that are set up in the config. This one isn\u2019t, so it needs checking by hand.</p>');
     return;
   }
   slOpenModal(head + '<p class="sl-msg">Checking ESPN\u2026</p>');
-  const {found, unavailable} = await slFindTeams(parsed.team);
-  const foot = '<div class="sl-foot">Live from ESPN regular-season standings. Doesn\u2019t change the Result column \u2014 mark Win/Loss in the sheet when it\u2019s decided.</div>';
+  const {found, unavailable, searched} = await slFindTeams(parsed.team, tr ? tr.league : null);
   let body;
   if(found.length){
     body = found.map(f => slCardHTML(parsed, f)).join('');
     if(found.length > 1) body = '<p class="sl-msg">More than one team goes by \u201C' + esc(parsed.team) + '\u201D \u2014 here are all of them:</p>' + body;
     if(unavailable.length) body += '<p class="sl-msg">Couldn\u2019t reach ESPN\u2019s ' + unavailable.map(k => SL_LEAGUES[k].label).join(' / ') + ' standings, so that league isn\u2019t shown.</p>';
-  } else if(unavailable.length === Object.keys(SL_LEAGUES).length){
+  } else if(unavailable.length === searched){
     body = '<p class="sl-msg">Couldn\u2019t reach ESPN right now. Try again in a minute.</p>';
   } else {
     body = '<p class="sl-msg">Couldn\u2019t find a team called \u201C' + esc(parsed.team) + '\u201D in ESPN\u2019s standings. Try the school/city name as ESPN spells it.</p>';
   }
-  if(token === slOpenToken && !document.getElementById('slModal').hidden) slOpenModal(head + body + foot);
+  show(head + body + foot);
 }
 
 // tap a Season Long pick anywhere (Standings, a player's page) -> its card.
