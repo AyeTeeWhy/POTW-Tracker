@@ -259,6 +259,35 @@
   .badge.win{color:var(--chalk-green); border-color:rgba(143,191,159,0.4);}
   .badge.loss{color:var(--chalk-red); border-color:rgba(217,135,135,0.4);}
   .badge.push{color:var(--chalk-dim); border-color:var(--line-strong);}
+
+  /* ---- Season Long tracker card ---- */
+  .season-long-pick[data-player]{cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px;}
+  body.modal-open{overflow:hidden;}
+  .sl-modal[hidden]{display:none;}
+  .sl-modal{position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center; padding:16px;}
+  .sl-backdrop{position:absolute; inset:0; background:rgba(0,0,0,0.68);}
+  .sl-card{
+    position:relative; width:100%; max-width:420px; max-height:86vh; overflow-y:auto;
+    background:var(--board-bg-2); border:1px solid var(--line-strong); border-radius:12px;
+    padding:20px 18px 18px; box-shadow:0 20px 60px rgba(0,0,0,0.6);
+  }
+  .sl-close{position:absolute; top:6px; right:8px; background:transparent; border:0; color:var(--chalk-dim); font-size:1.7rem; line-height:1; cursor:pointer; padding:4px 10px;}
+  .sl-title{font-family:var(--font-display); font-size:1.45rem; letter-spacing:0.5px; margin:0 30px 2px 0; color:var(--chalk-white); text-transform:uppercase; line-height:1.15;}
+  .sl-sub{font-size:0.78rem; color:var(--chalk-dim); margin-bottom:6px;}
+  .sl-team{border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-top:12px; background:rgba(255,255,255,0.02);}
+  .sl-team-name{display:flex; justify-content:space-between; align-items:center; gap:8px; font-weight:700;}
+  .sl-league{font-size:0.62rem; letter-spacing:0.8px; text-transform:uppercase; color:var(--chalk-dim); border:1px solid var(--line-strong); border-radius:6px; padding:1px 6px; white-space:nowrap;}
+  .sl-record{font-family:var(--font-display); font-size:2.7rem; line-height:1.1; margin:6px 0 0; color:var(--chalk-white);}
+  .sl-record small{font-family:var(--font-mono); font-size:0.78rem; color:var(--chalk-dim); letter-spacing:0.5px; margin-left:8px;}
+  .sl-bar{height:8px; border-radius:4px; background:rgba(255,255,255,0.09); overflow:hidden; margin:10px 0 5px;}
+  .sl-bar span{display:block; height:100%; background:var(--gold-bright); border-radius:4px;}
+  .sl-bar-label{font-size:0.72rem; color:var(--chalk-dim); display:flex; justify-content:space-between;}
+  .sl-state{margin-top:12px; font-weight:700; font-size:0.92rem;}
+  .sl-state.won{color:var(--chalk-green);} .sl-state.lost{color:var(--chalk-red);}
+  .sl-state.alive{color:var(--chalk-white);} .sl-state.pushonly{color:var(--chalk-dim);}
+  .sl-detail{font-size:0.8rem; color:var(--chalk-dim); margin-top:4px; line-height:1.5;}
+  .sl-msg{margin:10px 0 0; font-size:0.85rem; line-height:1.55; color:var(--chalk-dim);}
+  .sl-foot{margin-top:14px; font-size:0.7rem; color:var(--chalk-dim); line-height:1.5;}
   .units-positive{color:var(--chalk-green); font-weight:700;}
   .units-negative{color:var(--chalk-red); font-weight:700;}
   .units-total-box{
@@ -345,7 +374,11 @@
   .standings-table th:nth-child(5), .standings-table td:nth-child(5),
   .standings-table th:nth-child(6), .standings-table td:nth-child(6),
   .standings-table th:nth-child(7), .standings-table td:nth-child(7),
-  .standings-table th:nth-child(8), .standings-table td:nth-child(8){text-align:center;}
+  .standings-table th:nth-child(9), .standings-table td:nth-child(9){text-align:center;}
+  th[data-sort]{cursor:pointer; user-select:none; -webkit-user-select:none;}
+  th[data-sort]:hover{color:var(--chalk-white);}
+  th.sorted.asc::after{content:" \25B2"; font-size:0.6rem;}
+  th.sorted.desc::after{content:" \25BC"; font-size:0.6rem;}
   .title-odds{font-weight:700; color:var(--chalk-white);}
   .odds-note{margin:12px 2px 10px; font-size:0.72rem; line-height:1.5; color:var(--chalk-dim);}
 
@@ -454,13 +487,13 @@
         <div class="table-scroll">
         <table class="standings-table">
           <thead>
-            <tr><th></th><th>Player</th><th>Record</th><th>Win%</th><th>1st %</th><th>Streak</th><th>DOTD</th><th>POTY</th><th>&#127919; Season Long</th></tr>
+            <tr><th data-sort="rank" title="Tap to sort">#</th><th data-sort="name" title="Tap to sort">Player</th><th data-sort="record" title="Tap to sort">Record</th><th data-sort="winpct" title="Tap to sort">Win%</th><th data-sort="streak" title="Tap to sort">Streak</th><th data-sort="dotd" title="Tap to sort">DOTD</th><th data-sort="poty" title="Tap to sort">POTY</th><th data-sort="seasonlong" title="Tap to sort">&#127919; Season Long</th><th data-sort="odds" title="Tap to sort">1st %</th></tr>
           </thead>
           <tbody id="standingsBody"></tbody>
         </table>
         </div>
         </div>
-        <p class="odds-note"><b>1st %</b> = chance of finishing in 1st, from 20,000 simulated finishes of the rest of the season &mdash; counts each person's record so far, the weeks left, and any POTY, DOTD or Season Long pick still unsettled. A dead heat for 1st splits the credit. It's an estimate, not a promise.</p>
+        <p class="odds-note"><b>1st %</b> = chance of finishing in 1st, from 20,000 simulated finishes of the rest of the season &mdash; counts each person's record so far, the weeks left, and any POTY, DOTD or Season Long pick still unsettled. A dead heat for 1st splits the credit. It's an estimate, not a promise. Tap any column heading to sort; tap a Season Long pick to see how it's tracking.</p>
       </div>
     </section>
 
@@ -508,6 +541,14 @@
   </div>
 
   <footer>synced live from your Google Sheet</footer>
+</div>
+
+<div id="slModal" class="sl-modal" hidden>
+  <div class="sl-backdrop" data-close="1"></div>
+  <div class="sl-card" role="dialog" aria-modal="true" aria-labelledby="slTitle">
+    <button class="sl-close" data-close="1" aria-label="Close">&times;</button>
+    <div id="slBody"></div>
+  </div>
 </div>
 
 <script>
@@ -852,6 +893,9 @@ function computeStandings(records, seasonLongRecords){
     return {...p, total, winPct, streak, streakType};
   });
   standings.sort((a,b) => b.winPct - a.winPct || b.wins - a.wins || a.losses - b.losses);
+  // Official rank stays attached to the player so medals / the "#" column keep
+  // meaning even when the table is re-sorted by some other column.
+  standings.forEach((p, i) => { p.rank = i + 1; });
   return standings;
 }
 
@@ -1026,6 +1070,20 @@ function computeTitleOdds(standings, records){
     for(let k = 0; k < nTied; k++) first[tied[k]] += share;
   }
 
+  // Players in EXACTLY the same situation (same record, same open picks, same
+  // POTY/DOTD/Season Long status, same hit-rate estimate) have the same true
+  // chance by symmetry — any gap between them is simulation noise. Average
+  // them so identical situations always show identical numbers.
+  const groups = {};
+  pl.forEach((q, i) => {
+    const key = [q.w0, q.l0, q.pending.join(','), q.mustPoty, q.hasDotd, q.slOpen, q.pHit.toFixed(3)].join('|');
+    (groups[key] = groups[key] || []).push(i);
+  });
+  Object.values(groups).forEach(idxs => {
+    const mean = idxs.reduce((sum, i) => sum + first[i], 0) / idxs.length;
+    idxs.forEach(i => { first[i] = mean; });
+  });
+
   standings.forEach((p, i) => { out[p.name] = first[i] / N; });
   return out;
 }
@@ -1070,34 +1128,87 @@ function usageCell(kind, count){
 function seasonLongCell(p){
   if(!p.seasonLongPick) return '<span class="prob-note">&mdash;</span>';
   const cls = p.seasonLongResult === 'win' ? 'sl-win' : (p.seasonLongResult === 'loss' ? 'sl-loss' : 'sl-pending');
-  return `<span class="season-long-pick ${cls}" title="${p.seasonLongPick.replace(/"/g,'&quot;')}">${p.seasonLongPick}</span>`;
+  return `<span class="season-long-pick ${cls}" data-player="${encodeURIComponent(p.name)}" title="Tap to see how this pick is tracking">${p.seasonLongPick}</span>`;
 }
 
 let ALL_RECORDS = [];
 let ALL_STANDINGS = [];
 let ALL_UNITS = [];
 
+// ---- sorting (click/tap any column heading; tap again to flip direction) ----
+let STANDINGS_SORT = {key:'rank', dir:'asc'};
+const SORT_DEFAULT_DIR = {rank:'asc', name:'asc', record:'desc', winpct:'desc', streak:'desc', dotd:'desc', poty:'desc', seasonlong:'desc', odds:'desc'};
+
+function standingsSortValue(p, key){
+  switch(key){
+    case 'rank':   return p.rank;
+    case 'name':   return p.name.toLowerCase();
+    case 'record': return p.wins * 1000 - p.losses;
+    case 'winpct': return p.total ? p.winPct : -1;
+    case 'streak': return p.streakType === 'win' ? p.streak : (p.streakType === 'loss' ? -p.streak : 0);
+    case 'dotd':   return p.dotdCount;
+    case 'poty':   return p.potyCount;
+    case 'seasonlong':
+      if(!p.seasonLongPick) return 0;
+      return p.seasonLongResult === 'win' ? 3 : (p.seasonLongResult === 'loss' ? 1 : 2);
+    case 'odds':   return (p.titleOdds === undefined || p.titleOdds === null) ? -1 : p.titleOdds;
+    default:       return p.rank;
+  }
+}
+
+function sortedStandings(){
+  const mult = STANDINGS_SORT.dir === 'asc' ? 1 : -1;
+  return ALL_STANDINGS.slice().sort((a, b) => {
+    const va = standingsSortValue(a, STANDINGS_SORT.key);
+    const vb = standingsSortValue(b, STANDINGS_SORT.key);
+    const c = typeof va === 'string' ? va.localeCompare(vb) : (va - vb);
+    return c !== 0 ? c * mult : a.rank - b.rank; // ties fall back to the official order
+  });
+}
+
+function updateSortHeaders(){
+  document.querySelectorAll('.standings-table th[data-sort]').forEach(th => {
+    const active = th.dataset.sort === STANDINGS_SORT.key && !(STANDINGS_SORT.key === 'rank' && STANDINGS_SORT.dir === 'asc');
+    th.classList.toggle('sorted', active);
+    th.classList.toggle('asc', active && STANDINGS_SORT.dir === 'asc');
+    th.classList.toggle('desc', active && STANDINGS_SORT.dir === 'desc');
+  });
+}
+
+document.querySelectorAll('.standings-table th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.sort;
+    if(STANDINGS_SORT.key === key){
+      STANDINGS_SORT.dir = STANDINGS_SORT.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      STANDINGS_SORT = {key, dir: SORT_DEFAULT_DIR[key] || 'desc'};
+    }
+    renderStandings();
+  });
+});
+
 function renderStandings(){
   const body = document.getElementById('standingsBody');
   const medalClass = ['gold','silver','bronze'];
-  body.innerHTML = ALL_STANDINGS.map((p, i) => `
+  body.innerHTML = sortedStandings().map(p => `
     <tr class="clickable" data-player="${encodeURIComponent(p.name)}">
-      <td class="rank">${i<3 && p.total>0 ? `<span class="medal ${medalClass[i]}">${i+1}</span>` : (i+1)}</td>
+      <td class="rank">${p.rank<=3 && p.total>0 ? `<span class="medal ${medalClass[p.rank-1]}">${p.rank}</span>` : p.rank}</td>
       <td class="name">${p.name}</td>
       <td>${p.wins}-${p.losses}${p.pushes > 0 ? '-'+p.pushes : ''}</td>
       <td class="winpct">${p.total ? (p.winPct*100).toFixed(0)+'%' : '&mdash;'}</td>
-      <td class="title-odds">${fmtTitleOdds(p.titleOdds)}</td>
       <td class="${p.streak>=1 && p.streakType==='win' ? 'streak-win' : (p.streak>=1 && p.streakType==='loss' ? 'streak-loss':'')}">
         ${p.streak ? p.streak + (p.streakType==='win' ? 'W':'L') : '&mdash;'}
       </td>
       <td>${usageCell('dotd', p.dotdCount)}</td>
       <td>${usageCell('poty', p.potyCount)}</td>
       <td>${seasonLongCell(p)}</td>
+      <td class="title-odds">${fmtTitleOdds(p.titleOdds)}</td>
     </tr>
   `).join('');
   body.querySelectorAll('tr.clickable').forEach(tr => {
     tr.addEventListener('click', () => openPlayer(decodeURIComponent(tr.dataset.player)));
   });
+  updateSortHeaders();
   setupTableScrollFade();
 }
 
@@ -1279,6 +1390,232 @@ function showError(detail){
   document.getElementById('error').style.display = 'block';
   document.getElementById('errorDetail').textContent = detail;
 }
+
+
+// ============ SEASON LONG: LIVE WIN-TOTAL TRACKER ============
+// Tap a Season Long pick like "Lions Over 10.5 Wins" and get that team's
+// current regular-season record from ESPN, what it needs, and whether the
+// bet is alive / cashed / dead. Only team WIN TOTALS can be tracked this way
+// — player props (TDs, yards...) have no single number to look up, so those
+// just say so. It never touches the sheet; you still mark the Result yourself.
+const SL_LEAGUES = {
+  nfl: {label:'NFL',              path:'football/nfl',             games:17},
+  cfb: {label:'College football', path:'football/college-football', games:12}  // assumes a 12-game regular season
+};
+const slStandingsCache = {};
+
+function esc(str){
+  return String(str).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+}
+
+// "Lions Over 9.5 Wins" -> {team:'Lions', direction:'over', line:9.5}; null if it isn't a team win total.
+function parseSeasonLongWinTotal(text){
+  const t = (text || '').trim();
+  const dir = t.match(/\b(over|under)\b/i);
+  const num = t.match(/(\d+(?:\.\d+)?)/);
+  if(!dir || !num) return null;
+  const line = parseFloat(num[1]);
+  const statWord = /\b(tds?|touchdowns?|yards?|yds|rush\w*|rec\w*|pass\w*|sacks?|ints?|interceptions?|points?|pts|completions?|attempts?|tackles?|receptions?)\b/i.test(t);
+  if(statWord) return null;
+  const hasWins = /\bwins?\b/i.test(t);
+  if(!hasWins && !(line >= 3 && line <= 14.5)) return null;
+  const team = t
+    .replace(/\b(over|under)\b/ig, ' ')
+    .replace(/(\d+(?:\.\d+)?)/, ' ')
+    .replace(/\b(season|regular|total|wins?)\b/ig, ' ')
+    .replace(/[^A-Za-z0-9&.' -]/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+  if(!team) return null;
+  return {team, direction: dir[1].toLowerCase(), line};
+}
+
+function slSeasonYear(){
+  return CONFIG.SEASON_START_DATE ? parseInt(CONFIG.SEASON_START_DATE.slice(0, 4), 10) : new Date().getFullYear();
+}
+
+// ESPN nests standings under conferences/divisions at varying depth — walk the tree.
+function slCollectEntries(node, out, seasonTypes){
+  if(!node || typeof node !== 'object') return;
+  if(node.standings){
+    if(node.standings.seasonType !== undefined) seasonTypes.push(node.standings.seasonType);
+    (node.standings.entries || []).forEach(e => out.push(e));
+  }
+  (node.children || []).forEach(c => slCollectEntries(c, out, seasonTypes));
+}
+
+// Asks for REGULAR-season standings explicitly (seasontype=2). ESPN's plain
+// URL has been seen serving PRESEASON records, which would show the wrong win
+// count, so a preseason-only answer is flagged and never shown as real.
+async function slLoadLeague(key){
+  if(slStandingsCache[key]) return slStandingsCache[key];
+  const spec = SL_LEAGUES[key];
+  const base = 'https://site.api.espn.com/apis/v2/sports/' + spec.path + '/standings';
+  const urls = [base + '?season=' + slSeasonYear() + '&seasontype=2', base];
+  const job = (async () => {
+    let fallback = null, lastErr = null;
+    for(const url of urls){
+      try{
+        const res = await fetch(url);
+        if(!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        const entries = [], types = [];
+        slCollectEntries(data, entries, types);
+        if(!entries.length) throw new Error('no standings entries');
+        const preseasonOnly = types.length > 0 && types.every(tp => Number(tp) === 1);
+        const result = {entries, preseasonOnly};
+        if(!preseasonOnly) return result;
+        fallback = fallback || result;
+      } catch(e){ lastErr = e; }
+    }
+    if(fallback) return fallback;
+    throw lastErr || new Error('unavailable');
+  })();
+  slStandingsCache[key] = job;
+  job.catch(() => { delete slStandingsCache[key]; }); // let a later tap retry after a failure
+  return job;
+}
+
+// Exact-name matching only (name, nickname, city/school, full name, abbreviation).
+function slTeamMatches(needle, team){
+  const n = needle.trim().toLowerCase();
+  return [team.displayName, team.name, team.shortDisplayName, team.location, team.abbreviation]
+    .filter(Boolean).some(f => f.toLowerCase() === n);
+}
+
+// Overall W-L(-T) from an ESPN standings entry.
+function slEntryRecord(entry){
+  const stats = entry.stats || [];
+  const overall = stats.find(st => st.name === 'overall' && (st.summary || st.displayValue));
+  const txt = overall ? (overall.summary || overall.displayValue) : null;
+  if(txt && /^\d+-\d+(-\d+)?$/.test(txt)){
+    const [w, l, t] = txt.split('-').map(Number);
+    return {w, l, t: t || 0};
+  }
+  const get = name => { const st = stats.find(x => x.name === name); return st ? Number(st.value) : NaN; };
+  const w = get('wins'), l = get('losses'), t = get('ties');
+  if(isNaN(w) || isNaN(l)) return null;
+  return {w, l, t: isNaN(t) ? 0 : t};
+}
+
+async function slFindTeams(teamText){
+  const keys = Object.keys(SL_LEAGUES);
+  const settled = await Promise.allSettled(keys.map(k => slLoadLeague(k)));
+  const found = [], unavailable = [];
+  settled.forEach((r, i) => {
+    const key = keys[i];
+    if(r.status !== 'fulfilled'){ unavailable.push(key); return; }
+    r.value.entries.forEach(e => {
+      if(e.team && slTeamMatches(teamText, e.team)){
+        const rec = slEntryRecord(e);
+        if(rec) found.push({league:key, team:e.team, rec, preseasonOnly:r.value.preseasonOnly});
+      }
+    });
+  });
+  return {found, unavailable};
+}
+
+// Where does an Over/Under win total stand, given the record and games left?
+function slAssess(direction, line, rec, totalGames){
+  const played = rec.w + rec.l + rec.t;
+  const remaining = Math.max(0, totalGames - played);
+  const maxPossible = rec.w + remaining;
+  const overNeed = Math.floor(line) + 1;      // wins that make an Over cash
+  const underMax = Math.ceil(line) - 1;       // most wins an Under can survive
+  let state, headline, detail;
+  if(direction === 'over'){
+    if(rec.w > line){ state = 'won'; headline = 'Over has already cashed'; }
+    else if(maxPossible < line){ state = 'lost'; headline = "Over can't hit anymore"; }
+    else if(maxPossible === line){ state = 'pushonly'; headline = 'Best case from here is a push'; }
+    else {
+      const need = overNeed - rec.w;
+      state = 'alive'; headline = 'Still alive';
+      detail = 'Needs ' + need + ' more win' + (need === 1 ? '' : 's') + ' (to reach ' + overNeed + ') with ' + remaining + ' game' + (remaining === 1 ? '' : 's') + ' left.';
+    }
+  } else {
+    if(rec.w > line){ state = 'lost'; headline = 'Under is dead'; }
+    else if(rec.w === line){ state = 'pushonly'; headline = 'Can only push now (or lose with another win)'; }
+    else if(maxPossible < line){ state = 'won'; headline = 'Under has already cashed'; }
+    else {
+      const room = underMax - rec.w;
+      state = 'alive'; headline = 'Still alive';
+      detail = 'Can afford ' + room + ' more win' + (room === 1 ? '' : 's') + ' (up to ' + underMax + ') with ' + remaining + ' game' + (remaining === 1 ? '' : 's') + ' left.';
+    }
+  }
+  const pace = played ? (rec.w / played) * totalGames : null;
+  return {state, headline, detail, played, remaining, overNeed, pace};
+}
+
+function slCardHTML(parsed, f){
+  const spec = SL_LEAGUES[f.league];
+  const a = slAssess(parsed.direction, parsed.line, f.rec, spec.games);
+  const recText = f.rec.w + '-' + f.rec.l + (f.rec.t ? '-' + f.rec.t : '');
+  const pct = Math.max(0, Math.min(100, (f.rec.w / a.overNeed) * 100));
+  const icon = a.state === 'won' ? '\u2705 ' : (a.state === 'lost' ? '\u274C ' : '');
+  let html = '<div class="sl-team">' +
+    '<div class="sl-team-name"><span>' + esc(f.team.displayName || f.team.name) + '</span><span class="sl-league">' + esc(spec.label) + '</span></div>' +
+    '<div class="sl-record">' + f.rec.w + ' wins<small>' + esc(recText) + '</small></div>' +
+    '<div class="sl-bar"><span style="width:' + pct.toFixed(0) + '%"></span></div>' +
+    '<div class="sl-bar-label"><span>' + f.rec.w + ' wins now</span><span>' + a.overNeed + ' = Over cashes</span></div>';
+  if(f.preseasonOnly){
+    html += '<p class="sl-msg">ESPN is still showing <b>preseason</b> numbers for this league, so this record isn\u2019t the real regular-season count. Check back once ESPN switches over.</p>';
+  } else {
+    html += '<div class="sl-state ' + a.state + '">' + icon + esc(a.headline) + '</div>';
+    if(a.detail) html += '<div class="sl-detail">' + esc(a.detail) + '</div>';
+    if(a.pace !== null) html += '<div class="sl-detail">Pace: ' + a.pace.toFixed(1) + ' wins over a ' + spec.games + '-game season (line ' + parsed.line + ').</div>';
+  }
+  return html + '</div>';
+}
+
+function slOpenModal(html){
+  document.getElementById('slBody').innerHTML = html;
+  document.getElementById('slModal').hidden = false;
+  document.body.classList.add('modal-open');
+}
+function slCloseModal(){
+  document.getElementById('slModal').hidden = true;
+  document.body.classList.remove('modal-open');
+}
+
+let slOpenToken = 0;
+async function openSeasonLong(name){
+  const p = ALL_STANDINGS.find(x => x.name === name);
+  if(!p || !p.seasonLongPick) return;
+  const token = ++slOpenToken; // a newer tap supersedes a slower, older lookup
+  const head = '<h3 class="sl-title" id="slTitle">' + esc(p.seasonLongPick) + '</h3>' +
+               '<div class="sl-sub">' + esc(name) + '\u2019s Season Long pick</div>';
+  const parsed = parseSeasonLongWinTotal(p.seasonLongPick);
+  if(!parsed){
+    slOpenModal(head + '<p class="sl-msg">Live tracking only works for team win totals, like \u201CLions Over 10.5 Wins.\u201D This one is a player prop (or isn\u2019t written as a win total), so there\u2019s no single number to pull automatically \u2014 it needs checking by hand.</p>');
+    return;
+  }
+  slOpenModal(head + '<p class="sl-msg">Checking ESPN\u2026</p>');
+  const {found, unavailable} = await slFindTeams(parsed.team);
+  const foot = '<div class="sl-foot">Live from ESPN regular-season standings. Doesn\u2019t change the Result column \u2014 mark Win/Loss in the sheet when it\u2019s decided.</div>';
+  let body;
+  if(found.length){
+    body = found.map(f => slCardHTML(parsed, f)).join('');
+    if(found.length > 1) body = '<p class="sl-msg">More than one team goes by \u201C' + esc(parsed.team) + '\u201D \u2014 here are all of them:</p>' + body;
+    if(unavailable.length) body += '<p class="sl-msg">Couldn\u2019t reach ESPN\u2019s ' + unavailable.map(k => SL_LEAGUES[k].label).join(' / ') + ' standings, so that league isn\u2019t shown.</p>';
+  } else if(unavailable.length === Object.keys(SL_LEAGUES).length){
+    body = '<p class="sl-msg">Couldn\u2019t reach ESPN right now. Try again in a minute.</p>';
+  } else {
+    body = '<p class="sl-msg">Couldn\u2019t find a team called \u201C' + esc(parsed.team) + '\u201D in ESPN\u2019s standings. Try the school/city name as ESPN spells it.</p>';
+  }
+  if(token === slOpenToken && !document.getElementById('slModal').hidden) slOpenModal(head + body + foot);
+}
+
+// tap a Season Long pick anywhere (Standings, a player's page) -> its card.
+// Capture phase so it wins over the row's own "open this player" click.
+document.addEventListener('click', e => {
+  const pick = e.target.closest && e.target.closest('.season-long-pick[data-player]');
+  if(pick){
+    e.stopPropagation();
+    openSeasonLong(decodeURIComponent(pick.dataset.player));
+    return;
+  }
+  if(e.target.closest && e.target.closest('[data-close]')) slCloseModal();
+}, true);
+document.addEventListener('keydown', e => { if(e.key === 'Escape') slCloseModal(); });
 
 async function init(){
   if(!CONFIG.CSV_URL || CONFIG.CSV_URL.includes('PASTE_YOUR')){
