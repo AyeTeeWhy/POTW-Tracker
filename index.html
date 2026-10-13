@@ -706,8 +706,8 @@ const CONFIG = {
   // Apps Script (unit-overrides-script.gs) and paste its two links here:
   //   UNIT_OVERRIDES_WRITE_URL : the Apps Script "web app" URL
   //   UNIT_OVERRIDES_CSV_URL   : the published-to-web CSV link of the "Unit Overrides" tab
-  UNIT_OVERRIDES_WRITE_URL: "",
-  UNIT_OVERRIDES_CSV_URL: "",
+  UNIT_OVERRIDES_WRITE_URL: "https://script.google.com/macros/s/AKfycbx7nf5pEjQb2XQyxGrw_57O7lG978JuHE0DZ38wPo71lyVF3EUWQNhc5WSv96UOzQOFpQ/exec",
+  UNIT_OVERRIDES_CSV_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQCRC8yeTawObp3vTjHLXzExN2E-6NzA4G-3HJHJ_6bcQ4SA8SXtCwHAqfoAMjPFMBpTyilQQIBdQJU/pub?gid=211833553&single=true&output=csv",
   // First-place odds (Standings "Chance of Winning"): a Monte Carlo simulation of the
   // rest of the season. Everything below is an ASSUMPTION about the future,
   // not data — tweak freely if you think the group is sharper/duller than this.
@@ -1137,8 +1137,11 @@ async function loadUnitOverrides(){
     if(!res.ok) return null;
     const rows = parseCSV(await res.text());
     if(rows.length < 1) return {};
-    const kI = matchColumn(rows[0], ['key']), bI = matchColumn(rows[0], ['bucket']);
-    if(kI === -1 || bI === -1) return {};
+    // the Apps Script writes this tab by POSITION (A = Key, B = Bucket), so read it that way too;
+    // headers are only a hint, and a typo in the header row can't hide your saved choices
+    let kI = matchColumn(rows[0], ['key']), bI = matchColumn(rows[0], ['bucket']);
+    if(kI === -1) kI = 0;
+    if(bI === -1) bI = 1;
     const map = {};
     for(let i = 1; i < rows.length; i++){
       const key = (rows[i][kI] || '').trim(), bucket = (rows[i][bI] || '').trim();
