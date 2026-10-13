@@ -659,12 +659,11 @@ const CONFIG = {
     betType:   ['bet type','type of bet','bet kind']
   },
   // Season Long play: one NFL/CFB team win total or player season prop, over/under,
-  // per person for the whole year. Scoring is symmetric for now (win and loss both
-  // worth the same) since the exact loss rule hasn't been finalized — change
-  // SEASONLONG_LOSS_CREDIT below the moment that's decided.
+  // per person for the whole year. Scoring (final): a correct bet is worth 1 win;
+  // a wrong one costs nothing (0 losses), so it can only help in the standings.
   SEASONLONG_CSV_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQCRC8yeTawObp3vTjHLXzExN2E-6NzA4G-3HJHJ_6bcQ4SA8SXtCwHAqfoAMjPFMBpTyilQQIBdQJU/pub?gid=154875397&single=true&output=csv",
-  SEASONLONG_WIN_CREDIT: 2,
-  SEASONLONG_LOSS_CREDIT: 2,
+  SEASONLONG_WIN_CREDIT: 1,
+  SEASONLONG_LOSS_CREDIT: 0,
   SEASONLONG_COLUMNS: {
     timestamp: ['timestamp'],
     name:      ['name','player','who','picked by'],
@@ -1165,6 +1164,10 @@ async function sendUnitOverride(bet, bucket){
   } catch(e){ return 'failed'; }
 }
 
+// a choice made on THIS device that the shared sheet doesn't show yet (other devices can't see it)
+function isUnsynced(key){ return key in PENDING_OVERRIDES && (PENDING_OVERRIDES[key] || '') !== (SHEET_OVERRIDES[key] || ''); }
+function unsyncedCount(){ return Object.keys(PENDING_OVERRIDES).filter(isUnsynced).length; }
+
 let UNIT_OVR_STATE = 'idle';
 function overrideStatusText(){
   const shared = !!CONFIG.UNIT_OVERRIDES_WRITE_URL;
@@ -1173,7 +1176,13 @@ function overrideStatusText(){
     case 'sent':   return 'Saved \u2713 \u2014 sent to the sheet. It can take a minute or two to show up for everyone.';
     case 'local':  return 'Saved on this device only. To save it for everyone, connect the sheet (see the setup steps).';
     case 'failed': return 'Couldn\u2019t reach the sheet \u2014 saved on this device only for now.';
-    default: return UNIT_ADMIN ? (shared
+    default: {
+      const n = unsyncedCount();
+      if(UNIT_ADMIN && shared && n > 0){
+        return '\u26A0 ' + n + ' change' + (n === 1 ? '' : 's') + ' made on this device ' + (n === 1 ? 'isn\u2019t' : 'aren\u2019t') + ' in the sheet yet, so other devices (like phones) can\u2019t see ' + (n === 1 ? 'it' : 'them') + '. Look for ' + (n === 1 ? 'it' : 'them') + ' marked \u23F3 below. If it\u2019s been more than a few minutes, check the Unit Overrides tab in your sheet.';
+      }
+    }
+    return UNIT_ADMIN ? (shared
       ? 'Admin mode: choose a bet type from any dropdown below. Your choice is saved to the sheet for everyone.'
       : 'Admin mode: choose a bet type from any dropdown below. Right now choices are saved on this device only \u2014 connect the sheet to share them.') : '';
   }
@@ -1718,7 +1727,7 @@ function renderUnitTypes(){
     const rows = weekly.slice().sort((a, b) => (b.autoFlag - a.autoFlag) || a.name.localeCompare(b.name) || ((a.week || 0) - (b.week || 0)));
     const sortedAs = b => UNIT_ADMIN
       ? '<select class="bt-sel" data-key="' + encodeURIComponent(b.key) + '"><option value=""' + (b.overridden ? '' : ' selected') + '>Auto \u00B7 ' + b.autoBucket + (b.autoFlag ? ' \u26A0' : '') + '</option>' +
-        OVERRIDE_BUCKETS.map(x => '<option value="' + x + '"' + (b.overridden && b.bucket === x ? ' selected' : '') + '>' + x + '</option>').join('') + '</select>'
+        OVERRIDE_BUCKETS.map(x => '<option value="' + x + '"' + (b.overridden && b.bucket === x ? ' selected' : '') + '>' + x + '</option>').join('') + '</select>' + (isUnsynced(b.key) && CONFIG.UNIT_OVERRIDES_WRITE_URL ? '<div class="bt-why">\u23F3 not in the sheet yet</div>' : '')
       : (b.flag ? '\u26A0 ' : (b.overridden ? '\u2713 ' : '')) + b.bucket;
     au.innerHTML = '<table class="bt-table"><thead><tr><th>Player</th><th>Wk</th><th>Pick</th><th>Sorted as</th><th>Result</th></tr></thead><tbody>' +
       rows.map(b => `<tr class="${b.flag ? 'bt-flag' : (b.overridden ? 'bt-set' : '')}"><td class="bt-name">${esc2(b.name)}</td><td>${b.week || ''}</td><td class="bt-pick">${esc2(b.pick)}${b.note && b.note !== 'moneyline' && b.note !== 'moneyline or other' ? `<div class="bt-why">${esc2(b.note)}</div>` : ''}</td><td>${sortedAs(b)}</td><td class="${unitsCls(b.net)}">${b.res ? fmtUnits(b.net) : '<span class="prob-note">pending</span>'}</td></tr>`).join('') +
