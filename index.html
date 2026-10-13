@@ -310,6 +310,8 @@
   .audit-scroll .bt-pick{white-space:normal; min-width:180px;}
   .bt-why{font-weight:400; font-size:0.72rem; color:var(--chalk-dim); margin-top:2px;}
   tr.bt-flag td{background:rgba(214,170,90,0.10);}
+  tr.bt-set td{background:rgba(63,166,109,0.07);}
+  .bt-sel{background:var(--board-bg); color:var(--chalk-white); border:1px solid var(--line-strong); border-radius:6px; padding:5px 6px; font:inherit; font-size:0.8rem; max-width:190px;}
   @media (max-width:560px){ .bt-barcell{display:none;} }
   .units-positive{color:var(--chalk-green); font-weight:700;}
   .units-negative{color:var(--chalk-red); font-weight:700;}
@@ -582,7 +584,8 @@
 
         <details class="units-audit">
           <summary>How each bet was sorted</summary>
-          <p class="units-sub">The site reads each pick and guesses its sport and type; anything it's unsure about is listed first. To fix one, add a <b>Sport</b> and/or <b>Bet type</b> column to the sheet and fill it in on that row (NFL or CFB; Spread, Total, Prop or Moneyline) &mdash; the site uses what you typed instead of guessing.</p>
+          <p class="units-sub">The site reads each pick and guesses its sport and type; anything it's unsure about is listed first (&#9888;). Bets marked &#10003; were sorted by hand.</p>
+          <p class="units-sub" id="unitsOverrideStatus"></p>
           <div class="audit-scroll" id="unitsAudit"></div>
         </details>
       </div>
@@ -697,6 +700,14 @@ const CONFIG = {
   // Season Long bets count in the units (once marked Win/Loss) as their own "Season Long" row.
   UNIT_INCLUDE_SEASONLONG: true,
   UNIT_SEASONLONG_ODDS: -120,
+  // Hand-sorting bets (the dropdowns in "How each bet was sorted"). They only appear in ADMIN MODE:
+  // open the site once with ?admin=1 on the end of the address (your browser remembers; ?admin=0 turns it off).
+  // Choices always save in your own browser right away. To save them for EVERYONE, set up the small
+  // Apps Script (unit-overrides-script.gs) and paste its two links here:
+  //   UNIT_OVERRIDES_WRITE_URL : the Apps Script "web app" URL
+  //   UNIT_OVERRIDES_CSV_URL   : the published-to-web CSV link of the "Unit Overrides" tab
+  UNIT_OVERRIDES_WRITE_URL: "",
+  UNIT_OVERRIDES_CSV_URL: "",
   // First-place odds (Standings "Chance of Winning"): a Monte Carlo simulation of the
   // rest of the season. Everything below is an ASSUMPTION about the future,
   // not data — tweak freely if you think the group is sharper/duller than this.
@@ -1081,20 +1092,129 @@ function unitOutcome(result, odds){
   return null;
 }
 
+// ---- hand-sorting: a bet's bucket can be set by you, and your choice beats the site's guess ----
+const OVERRIDE_BUCKETS = UNIT_BUCKETS.filter(b => b !== 'Season Long');
+const UNIT_OVR_KEY = 'potwUnitOverrides';
+const UNIT_ADMIN = (() => {
+  try{
+    const q = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('admin') : null;
+    if(q === '1') localStorage.setItem('potwAdmin', '1');
+    if(q === '0') localStorage.removeItem('potwAdmin');
+    return localStorage.getItem('potwAdmin') === '1';
+  } catch(e){ return false; }
+})();
+
+// stable id for one weekly bet (a pick can't change once it's Official)
+function unitBetKey(rec){
+  return [rec.name, rec.week, rec.pick].map(x => String(x === null || x === undefined ? '' : x).toLowerCase().replace(/\s+/g, ' ').trim()).join('|');
+}
+function loadPendingOverrides(){ try{ return JSON.parse(localStorage.getItem(UNIT_OVR_KEY) || '{}') || {}; } catch(e){ return {}; } }
+function savePendingOverrides(obj){ try{ localStorage.setItem(UNIT_OVR_KEY, JSON.stringify(obj)); } catch(e){} }
+let SHEET_OVERRIDES = {};                         // shared choices read from the sheet
+let PENDING_OVERRIDES = loadPendingOverrides();   // your choices on THIS device (also what's waiting to reach the sheet); '' = "back to auto"
+function mergeOverrides(sheet, pending){
+  const out = Object.assign({}, sheet);
+  Object.keys(pending).forEach(k => { if(pending[k] === '') delete out[k]; else out[k] = pending[k]; });
+  return out;
+}
+// once the sheet shows the same value, the local copy has done its job
+function pruneConfirmed(sheet, pending){
+  const out = {};
+  Object.keys(pending).forEach(k => {
+    const confirmed = pending[k] === '' ? !(k in sheet) : sheet[k] === pending[k];
+    if(!confirmed) out[k] = pending[k];
+  });
+  return out;
+}
+function effectiveOverrides(){ return mergeOverrides(SHEET_OVERRIDES, PENDING_OVERRIDES); }
+
+// null = not set up / couldn't read (keep what we have); otherwise {key: bucket}
+async function loadUnitOverrides(){
+  const base = CONFIG.UNIT_OVERRIDES_CSV_URL;
+  if(!base) return null;
+  try{
+    const res = await fetch(base + (base.includes('?') ? '&' : '?') + 'cachebust=' + Date.now());
+    if(!res.ok) return null;
+    const rows = parseCSV(await res.text());
+    if(rows.length < 1) return {};
+    const kI = matchColumn(rows[0], ['key']), bI = matchColumn(rows[0], ['bucket']);
+    if(kI === -1 || bI === -1) return {};
+    const map = {};
+    for(let i = 1; i < rows.length; i++){
+      const key = (rows[i][kI] || '').trim(), bucket = (rows[i][bI] || '').trim();
+      if(key && OVERRIDE_BUCKETS.includes(bucket)) map[key] = bucket;
+    }
+    return map;
+  } catch(e){ return null; }
+}
+
+// 'sent' = posted to the Apps Script bridge, 'local' = bridge not set up, 'failed' = couldn't reach it.
+// (The browser can't read the bridge's reply across sites, so 'sent' means sent; the sheet is the receipt.)
+async function sendUnitOverride(bet, bucket){
+  if(!CONFIG.UNIT_OVERRIDES_WRITE_URL) return 'local';
+  try{
+    await fetch(CONFIG.UNIT_OVERRIDES_WRITE_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: {'Content-Type': 'text/plain;charset=utf-8'},
+      body: JSON.stringify({key: bet.key, bucket, name: bet.name, week: bet.week, pick: bet.pick})
+    });
+    return 'sent';
+  } catch(e){ return 'failed'; }
+}
+
+let UNIT_OVR_STATE = 'idle';
+function overrideStatusText(){
+  const shared = !!CONFIG.UNIT_OVERRIDES_WRITE_URL;
+  switch(UNIT_OVR_STATE){
+    case 'saving': return 'Saving\u2026';
+    case 'sent':   return 'Saved \u2713 \u2014 sent to the sheet. It can take a minute or two to show up for everyone.';
+    case 'local':  return 'Saved on this device only. To save it for everyone, connect the sheet (see the setup steps).';
+    case 'failed': return 'Couldn\u2019t reach the sheet \u2014 saved on this device only for now.';
+    default: return UNIT_ADMIN ? (shared
+      ? 'Admin mode: choose a bet type from any dropdown below. Your choice is saved to the sheet for everyone.'
+      : 'Admin mode: choose a bet type from any dropdown below. Right now choices are saved on this device only \u2014 connect the sheet to share them.') : '';
+  }
+}
+function renderOverrideStatus(){
+  const el = document.getElementById('unitsOverrideStatus');
+  if(el) el.textContent = overrideStatusText();
+}
+
+async function setUnitOverride(key, bucket){
+  const bet = UNIT_BETS.find(b => b.key === key);
+  if(!bet) return;
+  PENDING_OVERRIDES[key] = bucket;
+  savePendingOverrides(PENDING_OVERRIDES);
+  UNIT_OVR_STATE = 'saving';
+  rebuildUnits();
+  UNIT_OVR_STATE = await sendUnitOverride(bet, bucket);
+  renderOverrideStatus();
+}
+
+function rebuildUnits(){
+  UNIT_BETS = buildUnitBets(ALL_RECORDS, UNIT_SL, effectiveOverrides());
+  ALL_UNITS = unitsFromBets(UNIT_BETS);
+  renderUnits();
+}
+
 // Every bet once, with its bucket and dollar result. Pending bets are listed (res:null) only so the
 // "how each bet was sorted" list can show them; they never touch a total.
-function buildUnitBets(records, seasonLongRecords){
+function buildUnitBets(records, seasonLongRecords, overrides){
   const bets = [];
   (records || []).forEach(rec => {
     const odds = rec.pickType === 'dotd' ? CONFIG.UNIT_DOTD_ODDS : CONFIG.UNIT_DEFAULT_ODDS;
     const o = unitOutcome(rec.result, odds);
-    const b = unitBucket(rec);
-    bets.push({name:rec.name, week:rec.week, pick:rec.pick, bucket:b.bucket, note:b.note, flag:b.flag, res:o ? o.res : null, net:o ? o.net : 0});
+    const auto = unitBucket(rec);
+    const key = unitBetKey(rec);
+    const ov = overrides ? overrides[key] : null;
+    const set = !!(ov && OVERRIDE_BUCKETS.includes(ov));
+    const b = set ? {bucket: ov, note: 'adjusted by hand', flag: false} : auto;
+    bets.push({key, name:rec.name, week:rec.week, pick:rec.pick, bucket:b.bucket, autoBucket:auto.bucket, autoFlag:auto.flag, overridden:set, note:b.note, flag:b.flag, res:o ? o.res : null, net:o ? o.net : 0});
   });
   if(CONFIG.UNIT_INCLUDE_SEASONLONG){
     (seasonLongRecords || []).forEach(rec => {
       const o = unitOutcome(rec.result, CONFIG.UNIT_SEASONLONG_ODDS);
-      bets.push({name:rec.name, week:null, pick:rec.pick, bucket:'Season Long', note:'season-long bet', flag:false, res:o ? o.res : null, net:o ? o.net : 0});
+      bets.push({key:null, name:rec.name, week:null, pick:rec.pick, bucket:'Season Long', autoBucket:'Season Long', autoFlag:false, overridden:false, note:'season-long bet', flag:false, res:o ? o.res : null, net:o ? o.net : 0});
     });
   }
   return bets;
@@ -1346,6 +1466,7 @@ let ALL_RECORDS = [];
 let ALL_STANDINGS = [];
 let ALL_UNITS = [];
 let UNIT_BETS = [];
+let UNIT_SL = [];
 
 // ---- sorting (click/tap any column heading; tap again to flip direction) ----
 let STANDINGS_SORT = {key:'rank', dir:'asc'};
@@ -1589,11 +1710,19 @@ function renderUnitTypes(){
   }
   const au = document.getElementById('unitsAudit');
   if(au){
-    const rows = weekly.slice().sort((a, b) => (b.flag - a.flag) || a.name.localeCompare(b.name) || ((a.week || 0) - (b.week || 0)));
+    const prevScroll = au.scrollTop;   // keep your place while you work down the list
+    // order by what the site was unsure about originally, so rows don't jump as you fix them
+    const rows = weekly.slice().sort((a, b) => (b.autoFlag - a.autoFlag) || a.name.localeCompare(b.name) || ((a.week || 0) - (b.week || 0)));
+    const sortedAs = b => UNIT_ADMIN
+      ? '<select class="bt-sel" data-key="' + encodeURIComponent(b.key) + '"><option value=""' + (b.overridden ? '' : ' selected') + '>Auto \u00B7 ' + b.autoBucket + (b.autoFlag ? ' \u26A0' : '') + '</option>' +
+        OVERRIDE_BUCKETS.map(x => '<option value="' + x + '"' + (b.overridden && b.bucket === x ? ' selected' : '') + '>' + x + '</option>').join('') + '</select>'
+      : (b.flag ? '\u26A0 ' : (b.overridden ? '\u2713 ' : '')) + b.bucket;
     au.innerHTML = '<table class="bt-table"><thead><tr><th>Player</th><th>Wk</th><th>Pick</th><th>Sorted as</th><th>Result</th></tr></thead><tbody>' +
-      rows.map(b => `<tr class="${b.flag ? 'bt-flag' : ''}"><td class="bt-name">${esc2(b.name)}</td><td>${b.week || ''}</td><td class="bt-pick">${esc2(b.pick)}${b.note && b.note !== 'moneyline' && b.note !== 'moneyline or other' ? `<div class="bt-why">${esc2(b.note)}</div>` : ''}</td><td>${b.flag ? '\u26A0 ' : ''}${b.bucket}</td><td class="${unitsCls(b.net)}">${b.res ? fmtUnits(b.net) : '<span class="prob-note">pending</span>'}</td></tr>`).join('') +
+      rows.map(b => `<tr class="${b.flag ? 'bt-flag' : (b.overridden ? 'bt-set' : '')}"><td class="bt-name">${esc2(b.name)}</td><td>${b.week || ''}</td><td class="bt-pick">${esc2(b.pick)}${b.note && b.note !== 'moneyline' && b.note !== 'moneyline or other' ? `<div class="bt-why">${esc2(b.note)}</div>` : ''}</td><td>${sortedAs(b)}</td><td class="${unitsCls(b.net)}">${b.res ? fmtUnits(b.net) : '<span class="prob-note">pending</span>'}</td></tr>`).join('') +
       '</tbody></table>';
+    au.scrollTop = prevScroll;
   }
+  renderOverrideStatus();
 }
 
 function openPlayer(name){
@@ -2009,6 +2138,12 @@ async function openSeasonLong(name){
   show(head + body + foot);
 }
 
+// choosing a bet type from a dropdown in "How each bet was sorted" (admin mode)
+document.addEventListener('change', e => {
+  const sel = e.target && e.target.closest ? e.target.closest('select.bt-sel') : null;
+  if(sel) setUnitOverride(decodeURIComponent(sel.dataset.key), sel.value);
+});
+
 // tap a Season Long pick anywhere (Standings, a player's page) -> its card.
 // Capture phase so it wins over the row's own "open this player" click.
 document.addEventListener('click', e => {
@@ -2035,7 +2170,8 @@ async function init(){
     flagDuplicatePicks(ALL_RECORDS);
     const seasonLongRecords = await loadSeasonLongIfConfigured();
     ALL_STANDINGS = computeStandings(ALL_RECORDS, seasonLongRecords);
-    UNIT_BETS = buildUnitBets(ALL_RECORDS, seasonLongRecords);
+    UNIT_SL = seasonLongRecords;
+    UNIT_BETS = buildUnitBets(ALL_RECORDS, seasonLongRecords, effectiveOverrides());
     ALL_UNITS = unitsFromBets(UNIT_BETS);
     document.getElementById('loading').style.display = 'none';
     document.getElementById('app').style.display = 'block';
@@ -2053,6 +2189,18 @@ async function init(){
         ALL_STANDINGS.forEach(p => { p.titleOdds = titleOdds[p.name]; });
         renderStandings();
       } catch(e){ /* odds are a nice-to-have; never break the page over them */ }
+    }, 0);
+    // Shared hand-sorted bet types arrive a moment after first paint; then the Units tab refreshes.
+    setTimeout(async () => {
+      try{
+        const sheetOv = await loadUnitOverrides();
+        if(sheetOv){
+          SHEET_OVERRIDES = sheetOv;
+          PENDING_OVERRIDES = pruneConfirmed(sheetOv, PENDING_OVERRIDES);
+          savePendingOverrides(PENDING_OVERRIDES);
+          rebuildUnits();
+        }
+      } catch(e){ /* hand-sorting is optional — never break the page over it */ }
     }, 0);
   } catch(err){
     showError(String(err));
