@@ -365,8 +365,13 @@
     border:1px solid var(--line); color:var(--chalk-dim);
     opacity:0.4; white-space:nowrap;
   }
-  .usage-pill.active{opacity:1; border-color:var(--line-strong); color:var(--chalk-white);}
-  .usage-pill.poty.active{border-color:rgba(232,199,107,0.5); color:#E8C766;}
+  .usage-pill.active{opacity:1; border-color:rgba(237,237,236,0.55); color:var(--chalk-white);}      /* in play: white */
+  .usage-pill.active.win{border-color:rgba(143,191,159,0.65); color:var(--chalk-green); background:rgba(63,166,109,0.10);}
+  .usage-pill.active.loss{border-color:rgba(217,135,135,0.65); color:var(--chalk-red); background:rgba(184,92,74,0.10);}
+  .usage-pill.active.push{border-color:rgba(237,237,236,0.28); color:var(--chalk-dim);}
+  .usage-delta{margin-left:6px; font-family:var(--font-mono); font-size:0.78rem; font-weight:700; white-space:nowrap;}
+  .usage-delta.win{color:var(--chalk-green);}
+  .usage-delta.loss{color:var(--chalk-red);}
   .usage-pill.over{opacity:1; border-color:rgba(184,92,74,0.6); color:var(--chalk-red); background:rgba(184,92,74,0.08);}
 
   .season-long-pick{
@@ -927,19 +932,19 @@ function computeStandings(records, seasonLongRecords){
   const byName = {};
   const order = [];
   (CONFIG.ROSTER || []).forEach(n => {
-    if(!byName[n]){ byName[n] = {name:n, wins:0, losses:0, pushes:0, games:[], dotdCount:0, potyCount:0, seasonLongPick:null, seasonLongResult:null}; order.push(n); }
+    if(!byName[n]){ byName[n] = {name:n, wins:0, losses:0, pushes:0, games:[], dotdCount:0, potyCount:0, dotdResults:[], potyResults:[], seasonLongPick:null, seasonLongResult:null}; order.push(n); }
   });
   records
     .slice()
     .sort((a,b) => (a.week||0) - (b.week||0))
     .forEach(rec => {
       if(!byName[rec.name]){
-        byName[rec.name] = {name:rec.name, wins:0, losses:0, pushes:0, games:[], dotdCount:0, potyCount:0, seasonLongPick:null, seasonLongResult:null};
+        byName[rec.name] = {name:rec.name, wins:0, losses:0, pushes:0, games:[], dotdCount:0, potyCount:0, dotdResults:[], potyResults:[], seasonLongPick:null, seasonLongResult:null};
         order.push(rec.name);
       }
       const p = byName[rec.name];
-      if(rec.pickType === 'dotd'){ p.dotdCount++; rec.dotdSeq = p.dotdCount; }
-      if(rec.pickType === 'poty'){ p.potyCount++; rec.potySeq = p.potyCount; }
+      if(rec.pickType === 'dotd'){ p.dotdCount++; rec.dotdSeq = p.dotdCount; p.dotdResults.push(rec.result); }
+      if(rec.pickType === 'poty'){ p.potyCount++; rec.potySeq = p.potyCount; p.potyResults.push(rec.result); }
       if(rec.result === 'win'){
         if(rec.pickType === 'dotd') p.wins += CONFIG.DOTD_WIN_CREDIT;
         else if(rec.pickType === 'poty') p.wins += CONFIG.POTY_WIN_CREDIT;
@@ -955,7 +960,7 @@ function computeStandings(records, seasonLongRecords){
     });
   (seasonLongRecords || []).forEach(rec => {
     if(!byName[rec.name]){
-      byName[rec.name] = {name:rec.name, wins:0, losses:0, pushes:0, games:[], dotdCount:0, potyCount:0, seasonLongPick:null, seasonLongResult:null};
+      byName[rec.name] = {name:rec.name, wins:0, losses:0, pushes:0, games:[], dotdCount:0, potyCount:0, dotdResults:[], potyResults:[], seasonLongPick:null, seasonLongResult:null};
       order.push(rec.name);
     }
     const p = byName[rec.name];
@@ -1459,13 +1464,29 @@ function pickTag(pickType, seq){
   return '';
 }
 
-function usageCell(kind, count){
+function usageCell(kind, count, results){
   const icon = kind === 'dotd' ? '\u{1F415}' : '\u{1F3C6}'; // dog / trophy
+  const label = kind === 'dotd' ? 'Dog of the Day' : 'Play of the Year';
   const limit = kind === 'dotd' ? CONFIG.DOTD_ANNUAL_LIMIT : CONFIG.POTY_ANNUAL_LIMIT;
+  const winCredit  = kind === 'dotd' ? CONFIG.DOTD_WIN_CREDIT  : CONFIG.POTY_WIN_CREDIT;
+  const lossCredit = kind === 'dotd' ? CONFIG.DOTD_LOSS_CREDIT : CONFIG.POTY_LOSS_CREDIT;
   const over = count > limit;
   const active = count > 0;
-  const cls = over ? 'over' : (active ? 'active' : '');
-  return `<span class="usage-pill ${kind} ${cls}">${icon} ${count}${over ? ' \u26A0' : ''}</span>`;
+  // color follows how the bet is going: green = won, red = lost, white = still in play (dim = push)
+  const r = results && results.length ? results[0] : null;
+  const state = r === 'win' ? 'win' : (r === 'loss' ? 'loss' : (r === 'push' ? 'push' : ''));
+  const cls = over ? 'over' : (active ? 'active ' + state : '');
+  const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+  const note = over ? 'used more than allowed'
+    : (!active ? 'not used yet'
+    : (state === 'win' ? 'won \u2014 adds ' + plural(winCredit, 'win')
+    : (state === 'loss' ? 'lost \u2014 adds ' + plural(lossCredit, 'loss')
+    : (state === 'push' ? 'no result (push)' : 'in play'))));
+  // what it did to the record, shown right beside the pill once the bet is decided
+  let delta = '';
+  if(!over && state === 'win')  delta = `<span class="usage-delta win">+${winCredit}</span>`;
+  if(!over && state === 'loss') delta = `<span class="usage-delta loss">${lossCredit === 0 ? '0' : '\u2212' + lossCredit}</span>`;
+  return `<span class="usage-pill ${kind} ${cls}" title="${label}: ${note}">${icon} ${count}${over ? ' \u26A0' : ''}</span>${delta}`;
 }
 
 function seasonLongCell(p){
@@ -1544,8 +1565,8 @@ function renderStandings(){
       <td class="${p.streak>=1 && p.streakType==='win' ? 'streak-win' : (p.streak>=1 && p.streakType==='loss' ? 'streak-loss':'')}">
         ${p.streak ? p.streak + (p.streakType==='win' ? 'W':'L') : '&mdash;'}
       </td>
-      <td>${usageCell('dotd', p.dotdCount)}</td>
-      <td>${usageCell('poty', p.potyCount)}</td>
+      <td>${usageCell('dotd', p.dotdCount, p.dotdResults)}</td>
+      <td>${usageCell('poty', p.potyCount, p.potyResults)}</td>
       <td>${seasonLongCell(p)}</td>
       <td class="title-odds">${fmtTitleOdds(p.titleOdds)}</td>
     </tr>
@@ -1751,7 +1772,7 @@ function openPlayer(name){
   }).join('');
   panel.innerHTML = `
     <span class="back-link" id="backToPlayers">&larr; all players</span>
-    <h2>${name} ${p ? usageCell('dotd', p.dotdCount) + ' ' + usageCell('poty', p.potyCount) : ''} <span class="sm">${p ? p.wins+'-'+p.losses+(p.pushes>0?'-'+p.pushes:'')+' &middot; '+(p.total?(p.winPct*100).toFixed(0)+'% win rate':'no games yet') : ''}</span></h2>
+    <h2>${name} ${p ? usageCell('dotd', p.dotdCount, p.dotdResults) + ' ' + usageCell('poty', p.potyCount, p.potyResults) : ''} <span class="sm">${p ? p.wins+'-'+p.losses+(p.pushes>0?'-'+p.pushes:'')+' &middot; '+(p.total?(p.winPct*100).toFixed(0)+'% win rate':'no games yet') : ''}</span></h2>
     ${p && p.seasonLongPick ? `<p class="prob-note" style="margin:-8px 0 14px;">&#127919; Season Long: ${seasonLongCell(p)}</p>` : ''}
     <table class="player-table">
       <thead><tr><th>Week</th><th>Pick</th><th>Result</th></tr></thead>
